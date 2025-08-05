@@ -14,43 +14,17 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 # アップロードフォルダが存在しない場合は作成
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# 依存関係が失敗してもアプリが動作するように修正
-DEPENDENCIES_AVAILABLE = True
-try:
-    import cv2
-    import mediapipe as mp
-    import numpy as np
-    print("✅ All dependencies loaded successfully")
-    
-    # MediaPipe姿勢推定の初期化
-    mp_pose = mp.solutions.pose
-    mp_drawing = mp.solutions.drawing_utils
-    pose = mp_pose.Pose(static_image_mode=True, min_detection_confidence=0.5)
-    MEDIAPIPE_AVAILABLE = True
-    print("✅ MediaPipe initialized successfully")
-except ImportError as e:
-    DEPENDENCIES_AVAILABLE = False
-    MEDIAPIPE_AVAILABLE = False
-    print(f"⚠️ Dependencies not available: {e}")
-    print("🔧 Running in basic mode - manual joint point setting will be available")
-    # 基本機能のみで動作させる
-    cv2 = None
-    mp = None
-    pose = None
-    np = None
+# 🚨 超軽量版: AI依存関係を完全除去
+MANUAL_MODE_ONLY = True
+AI_DETECTION_AVAILABLE = False
+DEPENDENCIES_AVAILABLE = False
+MEDIAPIPE_AVAILABLE = False
 
-# MediaPipe landmark indices to frontend joint mapping
-MEDIAPIPE_TO_FRONTEND = {
-    11: 'LShoulder',  # 左肩
-    12: 'RShoulder',  # 右肩
-    23: 'LHip',       # 左腰
-    24: 'RHip',       # 右腰
-    25: 'LKnee',      # 左膝
-    26: 'RKnee',      # 右膝
-    27: 'LAnkle',     # 左足首
-    28: 'RAnkle',     # 右足首
-    0: 'C7'           # 鼻（第7頸椎の代用）
-}
+print("🚀 Ultra-lightweight mode: AI dependencies completely removed")
+print("🔧 Manual joint point setting only - guaranteed deployment success")
+
+# MediaPipe関連の変数とマッピングを削除（AI機能完全除去）
+# 関節点の順序は手動設定用に保持
 
 # Default joint positions for when MediaPipe is not available
 DEFAULT_JOINTS = {
@@ -69,25 +43,16 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 def calculate_angle(point1, point2, point3):
-    """3点から角度を計算する関数"""
+    """3点から角度を計算する関数 - 超軽量版（numpy非依存）"""
     try:
         # ベクトルを計算
         vector1 = [point1[0] - point2[0], point1[1] - point2[1]]
         vector2 = [point3[0] - point2[0], point3[1] - point2[1]]
         
-        # 内積を計算
-        if DEPENDENCIES_AVAILABLE and 'np' in globals():
-            # numpy利用可能な場合
-            vector1 = np.array(vector1)
-            vector2 = np.array(vector2)
-            dot_product = np.dot(vector1, vector2)
-            magnitude1 = np.linalg.norm(vector1)
-            magnitude2 = np.linalg.norm(vector2)
-        else:
-            # numpy無しの基本計算
-            dot_product = vector1[0] * vector2[0] + vector1[1] * vector2[1]
-            magnitude1 = math.sqrt(vector1[0]**2 + vector1[1]**2)
-            magnitude2 = math.sqrt(vector2[0]**2 + vector2[1]**2)
+        # 基本的な数学計算のみ使用（numpy非依存）
+        dot_product = vector1[0] * vector2[0] + vector1[1] * vector2[1]
+        magnitude1 = math.sqrt(vector1[0]**2 + vector1[1]**2)
+        magnitude2 = math.sqrt(vector2[0]**2 + vector2[1]**2)
         
         # ゼロ除算を避ける
         if magnitude1 == 0 or magnitude2 == 0:
@@ -172,7 +137,7 @@ def analyze_crouch_angles(keypoints, analysis_type="set"):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', manual_only=True)
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -200,39 +165,18 @@ def upload_file():
             keypoints_data = {}
             ai_detection_used = False
             
-            if MEDIAPIPE_AVAILABLE and cv2 is not None:
-                # MediaPipeで姿勢推定
-                try:
-                    image = cv2.imread(filepath)
-                    if image is not None:
-                        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                        results = pose.process(image_rgb)
-                        
-                        if results.pose_landmarks:
-                            # MediaPipeの関節点をフロントエンド形式に変換
-                            for mp_idx, frontend_name in MEDIAPIPE_TO_FRONTEND.items():
-                                if mp_idx < len(results.pose_landmarks.landmark):
-                                    landmark = results.pose_landmarks.landmark[mp_idx]
-                                    x = int(landmark.x * width)
-                                    y = int(landmark.y * height)
-                                    keypoints_data[frontend_name] = {'x': x, 'y': y}
-                            ai_detection_used = True
-                            print("✅ AI pose detection successful")
-                except Exception as e:
-                    print(f"⚠️ AI pose detection failed: {e}")
+            # 超軽量版：AI処理を完全に除去し、デフォルト位置のみ使用
+            print("🚀 Ultra-lightweight mode: Using default joint positions only")
             
-            # MediaPipeが利用できない場合またはランドマークが検出されない場合のデフォルト
-            if not keypoints_data:
-                print("🔧 Using default joint positions - manual adjustment available")
-                # デフォルトの関節点位置を画像サイズに合わせてスケール
-                scale_x = width / 400  # 基準サイズ400px
-                scale_y = height / 500  # 基準サイズ500px
-                
-                for joint_name, default_pos in DEFAULT_JOINTS.items():
-                    keypoints_data[joint_name] = {
-                        'x': int(default_pos['x'] * scale_x),
-                        'y': int(default_pos['y'] * scale_y)
-                    }
+            # デフォルトの関節点位置を画像サイズに合わせてスケール
+            scale_x = width / 400  # 基準サイズ400px
+            scale_y = height / 500  # 基準サイズ500px
+            
+            for joint_name, default_pos in DEFAULT_JOINTS.items():
+                keypoints_data[joint_name] = {
+                    'x': int(default_pos['x'] * scale_x),
+                    'y': int(default_pos['y'] * scale_y)
+                }
             
             return jsonify({
                 'success': True,
@@ -242,7 +186,7 @@ def upload_file():
                 'image_width': width,
                 'image_height': height,
                 'ai_detection_used': ai_detection_used,
-                'detection_method': 'AI pose detection' if ai_detection_used else 'Default positions (manual adjustment recommended)',
+                'detection_method': 'Manual adjustment mode (ultra-lightweight)',
                 'dependencies_available': DEPENDENCIES_AVAILABLE
             })
             
@@ -305,7 +249,7 @@ def test_endpoint():
             },
             'deployment_info': {
                 'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
-                'app_mode': 'AI-enabled' if DEPENDENCIES_AVAILABLE else 'Basic mode'
+                'app_mode': 'Ultra-lightweight mode (manual only)'
             }
         })
         
@@ -333,9 +277,9 @@ def health_check():
     }
     
     if not DEPENDENCIES_AVAILABLE:
-        status_info['message'] = 'Running in basic mode - AI features disabled'
+        status_info['message'] = 'Ultra-lightweight mode - manual joint setting only'
     else:
-        status_info['message'] = 'All features available'
+        status_info['message'] = 'Ultra-lightweight mode - manual joint setting only'
     
     return jsonify(status_info)
 

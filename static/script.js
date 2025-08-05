@@ -136,7 +136,7 @@ function handleFileUpload(file) {
             createJointButtons();
             updateModeDisplay();
             document.getElementById('analyzeBtn').disabled = false;
-            showSuccess('✅ AI姿勢推定が完了しました！');
+            showSuccess('✅ 画像アップロードが完了しました！手動で関節点を調整してください');
         } else {
             showError('❌ ' + data.error);
         }
