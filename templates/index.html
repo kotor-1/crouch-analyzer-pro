@@ -5,172 +5,235 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>クラウチングスタート姿勢分析</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Segoe UI', 'Meiryo UI', sans-serif;
-            background-color: #f8f9fa;
-        }
-        .header {
-            background: linear-gradient(135deg, #6c5ce7, #4834d4);
-            color: white;
-            padding: 20px 0;
-            margin-bottom: 30px;
-            border-radius: 0 0 10px 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .main-title {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
-        .main-title span {
-            font-size: 2rem;
-        }
-        .subtitle {
-            text-align: center;
-            opacity: 0.9;
-            font-size: 1rem;
-        }
-        .panel {
-            background-color: white;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
-        }
-        .panel-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-weight: 600;
-            color: #4834d4;
-            font-size: 1.1rem;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
-            margin-bottom: 15px;
-        }
-        .upload-area {
-            border: 2px dashed #6c5ce7;
-            border-radius: 8px;
-            padding: 30px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .upload-area:hover {
-            background-color: rgba(108, 92, 231, 0.05);
-        }
-        .upload-icon {
-            font-size: 2rem;
-            color: #6c5ce7;
-            margin-bottom: 15px;
-        }
-        .file-info {
-            color: #666;
-            font-size: 0.9rem;
-            margin-top: 10px;
-        }
-        .image-container {
-            position: relative;
-            margin: 20px 0;
-            width: 100%;
-            overflow: hidden;
-            border-radius: 8px;
-            box-shadow: 0 1px 5px rgba(0,0,0,0.1);
-            min-height: 300px;
-            background-color: #f5f5f5;
-        }
-        #preview-image {
-            display: block;
-            width: 100%;
-            max-height: 600px;
-        }
-        .joint-point {
-            position: absolute;
-            width: 16px;
-            height: 16px;
-            background-color: red;
-            border: 2px solid white;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-        }
-        .result-area {
-            margin-top: 20px;
-            padding: 20px;
-            background-color: #eaf0fb;
-            border-radius: 8px;
-            color: #222;
-            font-size: 1.1rem;
-        }
-    </style>
 </head>
-<body>
-    <div class="header">
-        <div class="container">
-            <div class="main-title">
-                <span>🏃‍♂️</span> クラウチングスタート姿勢分析
+<body class="bg-light">
+    <div class="container py-4">
+        <header class="text-center mb-4">
+            <h1 class="text-primary">クラウチングスタート姿勢分析</h1>
+            <p>チーム共有対応・本格分析ツール</p>
+        </header>
+
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        画像アップロード
+                    </div>
+                    <div class="card-body">
+                        <form id="upload-form">
+                            <div class="mb-3">
+                                <input type="file" class="form-control" id="image-file" accept="image/jpeg,image/png">
+                                <div class="form-text">JPG、PNGファイル（5MB以下）</div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">アップロード</button>
+                        </form>
+                        
+                        <div class="mt-3" id="status-message"></div>
+                        
+                        <div class="text-center mt-3">
+                            <img id="preview-image" class="img-fluid border" style="max-height:400px;display:none;">
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="subtitle">
-                あなたのクラウチングスタートフォームを画像で簡単解析
+            
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        分析ツール
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2 mb-3">
+                            <button class="btn btn-success" id="analyze-set">セット姿勢分析</button>
+                            <button class="btn btn-info text-white" id="analyze-takeoff">飛び出し分析</button>
+                        </div>
+                        
+                        <div id="result-panel" class="mt-4" style="display:none;">
+                            <h5 class="border-bottom pb-2">分析結果</h5>
+                            <div id="result-content"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-    <div class="container" style="max-width: 700px;">
-        <div class="panel">
-            <div class="panel-header">
-                <span>画像をアップロード</span>
-            </div>
-            <form id="upload-form" method="post" enctype="multipart/form-data">
-                <label class="upload-area" for="file-input">
-                    <div class="upload-icon">📷</div>
-                    <div>ここをクリックして画像を選択<br>またはドラッグ＆ドロップ</div>
-                    <input id="file-input" type="file" name="file" accept="image/*" style="display:none;" required>
-                    <div class="file-info" id="file-info"></div>
-                </label>
-                <button class="btn btn-primary mt-3" type="submit">解析する</button>
-            </form>
-        </div>
-        <div class="panel image-container" id="image-container" style="display:none;">
-            <img id="preview-image" src="" alt="プレビュー画像">
-            <!-- 関節点などを重ねて描画する場合はここに .joint-point をJSで追加 -->
-        </div>
-        <div id="result-area" class="result-area" style="display:none;">
-            解析結果がここに表示されます
-        </div>
-    </div>
+
     <script>
-        const fileInput = document.getElementById('file-input');
-        const fileInfo = document.getElementById('file-info');
-        const previewImage = document.getElementById('preview-image');
-        const imageContainer = document.getElementById('image-container');
-        const resultArea = document.getElementById('result-area');
-        const uploadForm = document.getElementById('upload-form');
-
-        fileInput.addEventListener('change', function() {
-            if (fileInput.files && fileInput.files[0]) {
-                fileInfo.textContent = fileInput.files[0].name;
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    previewImage.src = e.target.result;
-                    imageContainer.style.display = 'block';
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('upload-form');
+            const fileInput = document.getElementById('image-file');
+            const previewImage = document.getElementById('preview-image');
+            const statusMessage = document.getElementById('status-message');
+            const analyzeSetBtn = document.getElementById('analyze-set');
+            const analyzeTakeoffBtn = document.getElementById('analyze-takeoff');
+            const resultPanel = document.getElementById('result-panel');
+            const resultContent = document.getElementById('result-content');
+            
+            // 状態変数
+            let keypoints = {};
+            let imageWidth = 0;
+            let imageHeight = 0;
+            
+            // アップロードフォーム処理
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                if (!fileInput.files || !fileInput.files[0]) {
+                    showMessage('ファイルを選択してください', 'danger');
+                    return;
                 }
-                reader.readAsDataURL(fileInput.files[0]);
+                
+                const file = fileInput.files[0];
+                
+                // ファイルサイズチェック
+                if (file.size > 5 * 1024 * 1024) {
+                    showMessage('ファイルサイズが大きすぎます (最大5MB)', 'danger');
+                    return;
+                }
+                
+                // FormData作成
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                // ステータス表示
+                showMessage('アップロード中...', 'info');
+                
+                // アップロード処理
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // 画像表示
+                        previewImage.onload = function() {
+                            previewImage.style.display = 'block';
+                            showMessage('アップロード成功！関節点を自動配置しました', 'success');
+                        };
+                        previewImage.src = data.image_url + '?' + Date.now();
+                        
+                        // データ保存
+                        keypoints = data.keypoints;
+                        imageWidth = data.image_width;
+                        imageHeight = data.image_height;
+                    } else {
+                        showMessage('エラー: ' + data.error, 'danger');
+                    }
+                })
+                .catch(error => {
+                    showMessage('通信エラー: ' + error.message, 'danger');
+                });
+            });
+            
+            // メッセージ表示関数
+            function showMessage(message, type) {
+                statusMessage.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
             }
-        });
-
-        uploadForm.addEventListener('submit', function(e) {
-            // AJAXで送信したい場合はここを実装
-            // ここではデモとして解析結果エリアを表示
-            resultArea.style.display = 'block';
-            resultArea.textContent = '（デモ）フォームが送信されました。サーバーで画像を解析します。';
+            
+            // セット姿勢分析
+            analyzeSetBtn.addEventListener('click', function() {
+                if (Object.keys(keypoints).length === 0) {
+                    showMessage('画像をアップロードしてください', 'warning');
+                    return;
+                }
+                
+                showMessage('分析中...', 'info');
+                
+                fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        keypoints: keypoints,
+                        analysis_mode: 'set'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showResults(data);
+                        showMessage('分析完了', 'success');
+                    } else {
+                        showMessage('分析エラー: ' + data.error, 'danger');
+                    }
+                })
+                .catch(error => {
+                    showMessage('通信エラー: ' + error.message, 'danger');
+                });
+            });
+            
+            // 飛び出し分析
+            analyzeTakeoffBtn.addEventListener('click', function() {
+                if (Object.keys(keypoints).length === 0) {
+                    showMessage('画像をアップロードしてください', 'warning');
+                    return;
+                }
+                
+                showMessage('分析中...', 'info');
+                
+                fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        keypoints: keypoints,
+                        analysis_mode: 'takeoff'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showResults(data);
+                        showMessage('分析完了', 'success');
+                    } else {
+                        showMessage('分析エラー: ' + data.error, 'danger');
+                    }
+                })
+                .catch(error => {
+                    showMessage('通信エラー: ' + error.message, 'danger');
+                });
+            });
+            
+            // 結果表示
+            function showResults(data) {
+                resultPanel.style.display = 'block';
+                resultContent.innerHTML = '';
+                
+                if (data.analysis_type === 'set') {
+                    resultContent.innerHTML = `
+                        <ul class="list-group">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                前足膝角度
+                                <span class="badge bg-success rounded-pill">${data.front_angle}°</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                後足膝角度
+                                <span class="badge bg-success rounded-pill">${data.rear_angle}°</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                前足股関節角度
+                                <span class="badge bg-success rounded-pill">${data.front_hip_angle}°</span>
+                            </li>
+                        </ul>
+                    `;
+                } else {
+                    resultContent.innerHTML = `
+                        <ul class="list-group">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                下半身角度
+                                <span class="badge bg-success rounded-pill">${data.lower_angle}°</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                上半身角度
+                                <span class="badge bg-success rounded-pill">${data.upper_angle}°</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                くの字角度
+                                <span class="badge bg-success rounded-pill">${data.kunoji_angle}°</span>
+                            </li>
+                        </ul>
+                    `;
+                }
+            }
         });
     </script>
 </body>
