@@ -1,10 +1,9 @@
 services:
   - type: web
     name: crouch-analyzer-pro
-    runtime: python
-    pythonVersion: 3.11.4
+    env: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    startCommand: python -m gunicorn app:app
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.4
+        value: 3.13.4
