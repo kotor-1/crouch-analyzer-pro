@@ -1,46 +1,63 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>クラウチングスタート姿勢分析ツール</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-    <header>
-        <h1>🏃‍♂️ クラウチングスタート姿勢分析ツール</h1>
-        <p>チーム共有対応・本格分析ツール</p>
-    </header>
+<!-- 既存のHTMLに以下を追加 -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
 
-    <main>
-        <section class="upload-section">
-            <h2>📷 画像アップロード＆関節点調整</h2>
-            
-            <div id="dropZone" class="drop-zone">
-                <div class="drop-zone-prompt">
-                    <span>📂 ファイルをドラッグ&ドロップ または クリックして選択</span>
-                    <p>JPG, PNG, WEBP 対応 (最大16MB)</p>
-                </div>
-                <input type="file" id="fileInput" accept="image/jpeg, image/png, image/webp" class="drop-zone-input">
-            </div>
+<script>
+// ブラウザでMediaPipe Poseを初期化
+const pose = new Pose({locateFile: (file) => {
+  return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
+}});
 
-            <div class="button-group">
-                <button id="autoDetectBtn" class="btn primary-btn">AI自動検出</button>
-                <button id="analyzeBtn" class="btn secondary-btn">姿勢分析</button>
-                <button id="resetBtn" class="btn tertiary-btn">リセット</button>
-            </div>
-        </section>
+pose.setOptions({
+  modelComplexity: 1,
+  smoothLandmarks: true,
+  minDetectionConfidence: 0.5,
+  minTrackingConfidence: 0.5
+});
 
-        <section class="preview-section">
-            <div id="imagePreview" class="image-preview"></div>
-            <div id="analysisResults" class="analysis-results"></div>
-        </section>
-    </main>
+// 結果をFlaskに送信する関数
+function sendPoseResultsToServer(results) {
+  fetch('/save_pose_results', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ landmarks: results.poseLandmarks }),
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Success:', data);
+    analyzePosture(data.landmarks);
+  });
+}
 
-    <footer>
-        <p>© 2025 クラウチングスタート姿勢分析ツール</p>
-    </footer>
+// 姿勢分析の関数
+function analyzePosture(landmarks) {
+  // この部分で姿勢の角度計算とフィードバック生成
+  // ...
+}
 
+// 画像が選択されたときにMediaPipeで処理
+document.getElementById('imageInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  const reader = new FileReader();
+  
+  reader.onload = function() {
+    const img = new Image();
+    img.src = reader.result;
+    
+    img.onload = function() {
+      pose.send({image: img}).then(results => {
+        // 結果をサーバーに送信
+        sendPoseResultsToServer(results);
+      });
+    }
+  }
+  
+  reader.readAsDataURL(file);
+});
+</script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
+
 </html>
