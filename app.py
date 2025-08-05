@@ -1,10 +1,10 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
-import numpy as np
 import math
 from PIL import Image
 import io
 import base64
 import os
+import sys
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -14,20 +14,30 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 # アップロードフォルダが存在しない場合は作成
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# MediaPipe will be imported conditionally if available
+# 依存関係が失敗してもアプリが動作するように修正
+DEPENDENCIES_AVAILABLE = True
 try:
     import cv2
     import mediapipe as mp
+    import numpy as np
+    print("✅ All dependencies loaded successfully")
+    
     # MediaPipe姿勢推定の初期化
     mp_pose = mp.solutions.pose
     mp_drawing = mp.solutions.drawing_utils
     pose = mp_pose.Pose(static_image_mode=True, min_detection_confidence=0.5)
     MEDIAPIPE_AVAILABLE = True
-except ImportError:
+    print("✅ MediaPipe initialized successfully")
+except ImportError as e:
+    DEPENDENCIES_AVAILABLE = False
     MEDIAPIPE_AVAILABLE = False
+    print(f"⚠️ Dependencies not available: {e}")
+    print("🔧 Running in basic mode - manual joint point setting will be available")
+    # 基本機能のみで動作させる
     cv2 = None
     mp = None
     pose = None
+    np = None
 
 # MediaPipe landmark indices to frontend joint mapping
 MEDIAPIPE_TO_FRONTEND = {
@@ -62,15 +72,22 @@ def calculate_angle(point1, point2, point3):
     """3点から角度を計算する関数"""
     try:
         # ベクトルを計算
-        vector1 = np.array([point1[0] - point2[0], point1[1] - point2[1]])
-        vector2 = np.array([point3[0] - point2[0], point3[1] - point2[1]])
+        vector1 = [point1[0] - point2[0], point1[1] - point2[1]]
+        vector2 = [point3[0] - point2[0], point3[1] - point2[1]]
         
         # 内積を計算
-        dot_product = np.dot(vector1, vector2)
-        
-        # ベクトルの大きさを計算
-        magnitude1 = np.linalg.norm(vector1)
-        magnitude2 = np.linalg.norm(vector2)
+        if DEPENDENCIES_AVAILABLE and 'np' in globals():
+            # numpy利用可能な場合
+            vector1 = np.array(vector1)
+            vector2 = np.array(vector2)
+            dot_product = np.dot(vector1, vector2)
+            magnitude1 = np.linalg.norm(vector1)
+            magnitude2 = np.linalg.norm(vector2)
+        else:
+            # numpy無しの基本計算
+            dot_product = vector1[0] * vector2[0] + vector1[1] * vector2[1]
+            magnitude1 = math.sqrt(vector1[0]**2 + vector1[1]**2)
+            magnitude2 = math.sqrt(vector2[0]**2 + vector2[1]**2)
         
         # ゼロ除算を避ける
         if magnitude1 == 0 or magnitude2 == 0:
@@ -80,13 +97,14 @@ def calculate_angle(point1, point2, point3):
         cos_theta = dot_product / (magnitude1 * magnitude2)
         
         # 数値誤差を修正（-1から1の範囲に制限）
-        cos_theta = np.clip(cos_theta, -1.0, 1.0)
+        cos_theta = max(-1.0, min(1.0, cos_theta))
         
         # 角度を計算（ラジアンから度に変換）
         angle = math.degrees(math.acos(cos_theta))
         
         return round(angle, 1)
-    except:
+    except Exception as e:
+        print(f"⚠️ Angle calculation error: {e}")
         return 0
 
 def analyze_crouch_angles(keypoints, analysis_type="set"):
@@ -180,27 +198,32 @@ def upload_file():
                 width, height = img.size
             
             keypoints_data = {}
+            ai_detection_used = False
             
-            if MEDIAPIPE_AVAILABLE:
+            if MEDIAPIPE_AVAILABLE and cv2 is not None:
                 # MediaPipeで姿勢推定
-                image = cv2.imread(filepath)
-                if image is None:
-                    return jsonify({'error': '画像の読み込みに失敗しました'}), 400
-                    
-                image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                results = pose.process(image_rgb)
-                
-                if results.pose_landmarks:
-                    # MediaPipeの関節点をフロントエンド形式に変換
-                    for mp_idx, frontend_name in MEDIAPIPE_TO_FRONTEND.items():
-                        if mp_idx < len(results.pose_landmarks.landmark):
-                            landmark = results.pose_landmarks.landmark[mp_idx]
-                            x = int(landmark.x * width)
-                            y = int(landmark.y * height)
-                            keypoints_data[frontend_name] = {'x': x, 'y': y}
+                try:
+                    image = cv2.imread(filepath)
+                    if image is not None:
+                        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                        results = pose.process(image_rgb)
+                        
+                        if results.pose_landmarks:
+                            # MediaPipeの関節点をフロントエンド形式に変換
+                            for mp_idx, frontend_name in MEDIAPIPE_TO_FRONTEND.items():
+                                if mp_idx < len(results.pose_landmarks.landmark):
+                                    landmark = results.pose_landmarks.landmark[mp_idx]
+                                    x = int(landmark.x * width)
+                                    y = int(landmark.y * height)
+                                    keypoints_data[frontend_name] = {'x': x, 'y': y}
+                            ai_detection_used = True
+                            print("✅ AI pose detection successful")
+                except Exception as e:
+                    print(f"⚠️ AI pose detection failed: {e}")
             
             # MediaPipeが利用できない場合またはランドマークが検出されない場合のデフォルト
             if not keypoints_data:
+                print("🔧 Using default joint positions - manual adjustment available")
                 # デフォルトの関節点位置を画像サイズに合わせてスケール
                 scale_x = width / 400  # 基準サイズ400px
                 scale_y = height / 500  # 基準サイズ500px
@@ -217,7 +240,10 @@ def upload_file():
                 'keypoints': keypoints_data,
                 'image_url': f'/static/uploads/{filename}',
                 'image_width': width,
-                'image_height': height
+                'image_height': height,
+                'ai_detection_used': ai_detection_used,
+                'detection_method': 'AI pose detection' if ai_detection_used else 'Default positions (manual adjustment recommended)',
+                'dependencies_available': DEPENDENCIES_AVAILABLE
             })
             
         except Exception as e:
@@ -249,14 +275,69 @@ def share_analysis(analysis_id):
     # ここではデモ用に基本ページを返す
     return render_template('index.html', shared_analysis_id=analysis_id)
 
+@app.route('/api/test')
+def test_endpoint():
+    """テスト用エンドポイント - 基本機能の動作確認"""
+    try:
+        # Test basic functionality
+        test_keypoints = {
+            'LShoulder': {'x': 150, 'y': 100},
+            'LHip': {'x': 170, 'y': 200},
+            'LKnee': {'x': 180, 'y': 300},
+            'LAnkle': {'x': 190, 'y': 400}
+        }
+        
+        # Test angle calculation
+        test_angle = calculate_angle([150, 100], [170, 200], [180, 300])
+        
+        # Test analysis
+        analysis_result = analyze_crouch_angles(test_keypoints, "set")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Basic functionality test passed',
+            'dependencies_available': DEPENDENCIES_AVAILABLE,
+            'mediapipe_available': MEDIAPIPE_AVAILABLE,
+            'test_results': {
+                'angle_calculation': test_angle,
+                'analysis_function': analysis_result,
+                'default_joints_available': len(DEFAULT_JOINTS) > 0
+            },
+            'deployment_info': {
+                'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+                'app_mode': 'AI-enabled' if DEPENDENCIES_AVAILABLE else 'Basic mode'
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Test failed: {str(e)}',
+            'dependencies_available': DEPENDENCIES_AVAILABLE,
+            'mediapipe_available': MEDIAPIPE_AVAILABLE
+        }), 500
+
 @app.route('/api/health')
 def health_check():
     """ヘルスチェック用エンドポイント"""
-    return jsonify({
+    status_info = {
         'status': 'healthy',
+        'dependencies_available': DEPENDENCIES_AVAILABLE,
         'mediapipe_available': MEDIAPIPE_AVAILABLE,
-        'version': '1.0.0'
-    })
+        'version': '1.0.0',
+        'features': {
+            'manual_joint_setting': True,  # 常に利用可能
+            'ai_pose_detection': MEDIAPIPE_AVAILABLE,
+            'angle_analysis': True  # numpy非依存の基本計算は常に利用可能
+        }
+    }
+    
+    if not DEPENDENCIES_AVAILABLE:
+        status_info['message'] = 'Running in basic mode - AI features disabled'
+    else:
+        status_info['message'] = 'All features available'
+    
+    return jsonify(status_info)
 
 if __name__ == '__main__':
     import os
