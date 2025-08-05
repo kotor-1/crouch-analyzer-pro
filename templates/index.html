@@ -49,12 +49,6 @@
             font-size: 12px;
             z-index: 15;
         }
-        .control-panel {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
         .image-container {
             position: relative;
             margin: 15px 0;
@@ -81,25 +75,32 @@
             border-radius: 4px;
             background-color: #e9ecef;
         }
-        .arrow-controls {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            grid-template-rows: 1fr 1fr 1fr;
-            width: 120px;
-            margin: 10px auto;
-        }
-        .arrow-btn {
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
         footer {
             margin-top: 40px;
             padding: 20px 0;
             background-color: #f8f9fa;
             text-align: center;
+        }
+        .joint-control-panel {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        .joint-number {
+            position: absolute;
+            color: white;
+            background-color: rgba(0,0,0,0.6);
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            font-size: 10px;
+            text-align: center;
+            line-height: 18px;
+            transform: translate(-50%, -50%);
+            z-index: 11;
+            margin-left: 6px;
+            margin-top: -6px;
         }
     </style>
 </head>
@@ -115,11 +116,6 @@
                     <li class="nav-item">
                         <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#helpModal">
                             <i class="bi bi-question-circle"></i> 使い方
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#" id="share-btn">
-                            <i class="bi bi-share"></i> 共有
                         </a>
                     </li>
                 </ul>
@@ -166,73 +162,90 @@
                         </div>
 
                         <!-- 関節点編集モード選択 -->
-                        <div class="control-panel mt-3">
+                        <div class="joint-control-panel mt-3">
                             <h6>🔢 関節点調整モード:</h6>
                             <div class="mode-selector btn-group" role="group">
-                                <button type="button" class="btn btn-outline-primary active" data-mode="click">
-                                    ❶ クリック選択
+                                <button type="button" class="btn btn-outline-primary active" data-mode="dropdown">
+                                    ❶ プルダウン選択
                                 </button>
-                                <button type="button" class="btn btn-outline-primary" data-mode="arrow">
-                                    ❷ 方向キー調整
-                                </button>
-                                <button type="button" class="btn btn-outline-primary" data-mode="dropdown">
-                                    ❸ プルダウン選択
-                                </button>
-                                <button type="button" class="btn btn-outline-primary" data-mode="all">
-                                    ❹ 一括表示
+                                <button type="button" class="btn btn-outline-primary" data-mode="horizontal">
+                                    ❷ 横並び表示
                                 </button>
                             </div>
 
-                            <!-- 方向キーコントロール (アローモード用) -->
-                            <div id="arrow-controls" class="mt-3" style="display:none;">
+                            <!-- プルダウン選択モード用 -->
+                            <div id="dropdown-controls" class="mt-3">
                                 <div class="row">
-                                    <div class="col-md-6">
-                                        <select class="form-select mb-2" id="joint-selector">
-                                            <option value="1">頭部</option>
-                                            <option value="2">右肩</option>
-                                            <option value="3">右腰</option>
-                                            <option value="4">右膝</option>
-                                            <option value="5">左膝</option>
-                                            <option value="6">右足首</option>
-                                            <option value="7">左足首</option>
-                                            <option value="8">左手首</option>
-                                            <option value="9">右手首</option>
+                                    <div class="col-md-8">
+                                        <select class="form-select" id="dropdown-joint-selector">
+                                            <option value="1">① 鼻/頭部</option>
+                                            <option value="2">② 右肩</option>
+                                            <option value="3">③ 右腰</option>
+                                            <option value="4">④ 右膝</option>
+                                            <option value="5">⑤ 左膝</option>
+                                            <option value="6">⑥ 右足首</option>
+                                            <option value="7">⑦ 左足首</option>
+                                            <option value="8">⑧ 左手首</option>
+                                            <option value="9">⑨ 右手首</option>
+                                            <option value="10">⑩ 第7頸椎(C7)</option>
                                         </select>
                                     </div>
+                                    <div class="col-md-4">
+                                        <button class="btn btn-primary w-100" id="show-selected-joint">表示/調整</button>
+                                    </div>
+                                </div>
+                                <div class="row mt-3" id="joint-adjustment-panel" style="display:none;">
                                     <div class="col-md-6">
-                                        <div class="arrow-controls">
-                                            <button class="btn btn-sm btn-light arrow-btn" data-dir="nw">↖</button>
-                                            <button class="btn btn-sm btn-light arrow-btn" data-dir="n">↑</button>
-                                            <button class="btn btn-sm btn-light arrow-btn" data-dir="ne">↗</button>
-                                            <button class="btn btn-sm btn-light arrow-btn" data-dir="w">←</button>
-                                            <button class="btn btn-sm btn-light arrow-btn" data-dir="c">•</button>
-                                            <button class="btn btn-sm btn-light arrow-btn" data-dir="e">→</button>
-                                            <button class="btn btn-sm btn-light arrow-btn" data-dir="sw">↙</button>
-                                            <button class="btn btn-sm btn-light arrow-btn" data-dir="s">↓</button>
-                                            <button class="btn btn-sm btn-light arrow-btn" data-dir="se">↘</button>
-                                        </div>
+                                        <label for="joint-x-input">X座標（左右）:</label>
+                                        <input type="range" class="form-range" id="joint-x-input" min="0" max="100" value="50">
+                                        <div class="text-center" id="joint-x-value">50%</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="joint-y-input">Y座標（上下）:</label>
+                                        <input type="range" class="form-range" id="joint-y-input" min="0" max="100" value="50">
+                                        <div class="text-center" id="joint-y-value">50%</div>
                                     </div>
                                 </div>
                             </div>
 
-                            <!-- プルダウン選択モード用 -->
-                            <div id="dropdown-controls" class="mt-3" style="display:none;">
-                                <div class="row">
-                                    <div class="col-md-8">
-                                        <select class="form-select" id="dropdown-joint-selector">
-                                            <option value="1">頭部</option>
-                                            <option value="2">右肩</option>
-                                            <option value="3">右腰</option>
-                                            <option value="4">右膝</option>
-                                            <option value="5">左膝</option>
-                                            <option value="6">右足首</option>
-                                            <option value="7">左足首</option>
-                                            <option value="8">左手首</option>
-                                            <option value="9">右手首</option>
-                                        </select>
+                            <!-- 横並び表示モード用 -->
+                            <div id="horizontal-controls" class="mt-3" style="display:none;">
+                                <div class="row" id="upper-body-controls">
+                                    <h6>上半身関節点:</h6>
+                                    <div class="col mb-3" id="joint-1-control">
+                                        <small>① 鼻/頭部</small>
+                                        <button class="btn btn-sm btn-outline-secondary w-100 mb-1 joint-adjust-btn" data-joint="1">調整</button>
                                     </div>
-                                    <div class="col-md-4">
-                                        <button class="btn btn-primary w-100" id="show-selected-joint">表示</button>
+                                    <div class="col mb-3" id="joint-2-control">
+                                        <small>② 右肩</small>
+                                        <button class="btn btn-sm btn-outline-secondary w-100 mb-1 joint-adjust-btn" data-joint="2">調整</button>
+                                    </div>
+                                    <div class="col mb-3" id="joint-3-control">
+                                        <small>③ 右腰</small>
+                                        <button class="btn btn-sm btn-outline-secondary w-100 mb-1 joint-adjust-btn" data-joint="3">調整</button>
+                                    </div>
+                                    <div class="col mb-3" id="joint-10-control">
+                                        <small>⑩ C7</small>
+                                        <button class="btn btn-sm btn-outline-secondary w-100 mb-1 joint-adjust-btn" data-joint="10">調整</button>
+                                    </div>
+                                </div>
+                                <div class="row" id="lower-body-controls">
+                                    <h6>下半身関節点:</h6>
+                                    <div class="col mb-3" id="joint-4-control">
+                                        <small>④ 右膝</small>
+                                        <button class="btn btn-sm btn-outline-secondary w-100 mb-1 joint-adjust-btn" data-joint="4">調整</button>
+                                    </div>
+                                    <div class="col mb-3" id="joint-5-control">
+                                        <small>⑤ 左膝</small>
+                                        <button class="btn btn-sm btn-outline-secondary w-100 mb-1 joint-adjust-btn" data-joint="5">調整</button>
+                                    </div>
+                                    <div class="col mb-3" id="joint-6-control">
+                                        <small>⑥ 右足首</small>
+                                        <button class="btn btn-sm btn-outline-secondary w-100 mb-1 joint-adjust-btn" data-joint="6">調整</button>
+                                    </div>
+                                    <div class="col mb-3" id="joint-7-control">
+                                        <small>⑦ 左足首</small>
+                                        <button class="btn btn-sm btn-outline-secondary w-100 mb-1 joint-adjust-btn" data-joint="7">調整</button>
                                     </div>
                                 </div>
                             </div>
@@ -316,17 +329,16 @@
                     <ol>
                         <li>画像をドラッグ&ドロップまたは選択してアップロード</li>
                         <li>AI姿勢推定により関節点が自動検出されます</li>
-                        <li>4つの調整モードから選んで関節点を調整できます</li>
+                        <li>関節点をドラッグして位置を調整できます</li>
+                        <li>プルダウンや横並び表示モードで詳細調整も可能</li>
                         <li>「セット姿勢分析」または「飛び出し分析」を選択</li>
                         <li>分析結果を確認し、必要に応じて画像を保存</li>
                     </ol>
                     
                     <h6>関節点調整モード</h6>
                     <ul>
-                        <li><b>❶ クリック選択</b>: 関節点をクリックして選択し、画像上の任意の場所をクリックして移動</li>
-                        <li><b>❷ 方向キー調整</b>: プルダウンで関節点を選び、方向ボタンで細かく移動</li>
-                        <li><b>❸ プルダウン選択</b>: ドロップダウンから関節点を選択して表示・移動</li>
-                        <li><b>❹ 一括表示</b>: すべての関節点を同時に表示して調整</li>
+                        <li><b>❶ プルダウン選択</b>: ドロップダウンから関節点を選び、スライダーで位置を調整</li>
+                        <li><b>❷ 横並び表示</b>: すべての関節点のボタンを表示し、クリックして個別に調整</li>
                     </ul>
                     
                     <h6>分析モード</h6>
@@ -334,31 +346,12 @@
                         <li><b>🏃 セット姿勢分析</b>: 前足膝角度、後足膝角度、股関節角度を分析</li>
                         <li><b>🚀 飛び出し分析</b>: 下半身角度、上半身角度、くの字角度を分析</li>
                     </ul>
+                    
+                    <h6>関節点説明</h6>
+                    <p>① 鼻/頭部 ② 右肩 ③ 右腰 ④ 右膝 ⑤ 左膝 ⑥ 右足首 ⑦ 左足首 ⑧ 左手首 ⑨ 右手首 ⑩ 第7頸椎(C7)</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">閉じる</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 共有モーダル -->
-    <div class="modal fade" id="shareModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">分析結果を共有</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p>以下のURLをコピーしてチームメンバーと共有できます:</p>
-                    <div class="input-group">
-                        <input type="text" class="form-control" id="share-url" readonly>
-                        <button class="btn btn-outline-primary" type="button" id="copy-url-btn">コピー</button>
-                    </div>
-                    <div class="mt-2" id="copy-success" style="display:none;">
-                        <div class="alert alert-success">URLをコピーしました！</div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -380,33 +373,42 @@
             const anglesContainer = document.getElementById('angles-container');
             const feedbackContainer = document.getElementById('feedback-container');
             const modeButtons = document.querySelectorAll('.mode-selector .btn');
-            const arrowControls = document.getElementById('arrow-controls');
             const dropdownControls = document.getElementById('dropdown-controls');
-            const jointSelector = document.getElementById('joint-selector');
+            const horizontalControls = document.getElementById('horizontal-controls');
+            const dropdownJointSelector = document.getElementById('dropdown-joint-selector');
+            const showSelectedJointBtn = document.getElementById('show-selected-joint');
+            const jointAdjustmentPanel = document.getElementById('joint-adjustment-panel');
+            const jointXInput = document.getElementById('joint-x-input');
+            const jointYInput = document.getElementById('joint-y-input');
+            const jointXValue = document.getElementById('joint-x-value');
+            const jointYValue = document.getElementById('joint-y-value');
+            const jointAdjustBtns = document.querySelectorAll('.joint-adjust-btn');
             const downloadBtn = document.getElementById('download-btn');
             const analyzeSetBtn = document.getElementById('analyze-set-btn');
             const analyzeStartBtn = document.getElementById('analyze-start-btn');
-            const shareBtn = document.getElementById('share-btn');
-            const shareUrlInput = document.getElementById('share-url');
-            const copyUrlBtn = document.getElementById('copy-url-btn');
             
             // 変数の初期化
             let jointPoints = {};
             let selectedJoint = null;
-            let currentMode = 'click';
+            let currentMode = 'dropdown';
             let anglesChart = null;
+            let isDragging = false;
+            let dragTarget = null;
+            let dragOffsetX = 0;
+            let dragOffsetY = 0;
             
             // 関節点の名前マッピング
             const jointNames = {
-                '1': '頭部',
-                '2': '右肩',
-                '3': '右腰',
-                '4': '右膝',
-                '5': '左膝',
-                '6': '右足首',
-                '7': '左足首',
-                '8': '左手首',
-                '9': '右手首'
+                '1': '① 鼻/頭部',
+                '2': '② 右肩',
+                '3': '③ 右腰',
+                '4': '④ 右膝',
+                '5': '⑤ 左膝',
+                '6': '⑥ 右足首',
+                '7': '⑦ 左足首',
+                '8': '⑧ 左手首',
+                '9': '⑨ 右手首',
+                '10': '⑩ C7'
             };
             
             // ドラッグ&ドロップ処理の設定
@@ -492,23 +494,9 @@
                 const imgWidth = previewImage.clientWidth;
                 const imgHeight = previewImage.clientHeight;
                 
-                // 表示する関節点を決定（モードに基づく）
-                let pointsToRender = {};
-                
-                if (currentMode === 'all') {
-                    // 全ての関節点を表示
-                    pointsToRender = jointPoints;
-                } else if (currentMode === 'dropdown' && selectedJoint) {
-                    // 選択された関節点のみ表示
-                    pointsToRender[selectedJoint] = jointPoints[selectedJoint];
-                } else if (currentMode === 'click' || currentMode === 'arrow') {
-                    // 全ての関節点を表示（選択可能状態で）
-                    pointsToRender = jointPoints;
-                }
-                
-                // 関節点を描画
-                for (const key in pointsToRender) {
-                    const joint = pointsToRender[key];
+                // 関節点の描画
+                for (const key in jointPoints) {
+                    const joint = jointPoints[key];
                     const jointElement = document.createElement('div');
                     jointElement.className = 'joint-point';
                     jointElement.id = `joint-${key}`;
@@ -529,42 +517,132 @@
                         jointElement.style.height = '16px';
                     }
                     
-                    // ドラッグ機能を追加
-                    makeJointDraggable(jointElement);
+                    // 関節番号の表示
+                    const jointNumber = document.createElement('div');
+                    jointNumber.className = 'joint-number';
+                    jointNumber.textContent = key;
+                    jointElement.appendChild(jointNumber);
                     
-                    // クリック選択モードの場合、クリックイベントを追加
-                    if (currentMode === 'click') {
-                        jointElement.addEventListener('click', function(e) {
-                            e.stopPropagation();
-                            selectJoint(key);
-                        });
-                    }
+                    // ドラッグ機能を追加
+                    addDragListeners(jointElement);
                     
                     imageContainer.appendChild(jointElement);
                 }
                 
-                // 関節点間の線と角度の描画
-                drawLinesAndAngles();
+                // 関節点間の線を描画
+                drawLines();
             }
             
-            // 関節点間の線と角度の描画
-            function drawLinesAndAngles() {
-                // 既存の線と角度表示をクリア
-                document.querySelectorAll('.joint-line, .angle-text').forEach(el => el.remove());
+            // ドラッグ機能の追加
+            function addDragListeners(element) {
+                element.addEventListener('mousedown', startDrag);
+                element.addEventListener('touchstart', startDrag, { passive: false });
+                
+                function startDrag(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    isDragging = true;
+                    dragTarget = element;
+                    
+                    const jointId = element.getAttribute('data-joint-id');
+                    selectJoint(jointId);
+                    
+                    if (e.type === 'mousedown') {
+                        dragOffsetX = e.clientX - element.getBoundingClientRect().left;
+                        dragOffsetY = e.clientY - element.getBoundingClientRect().top;
+                    } else {
+                        dragOffsetX = e.touches[0].clientX - element.getBoundingClientRect().left;
+                        dragOffsetY = e.touches[0].clientY - element.getBoundingClientRect().top;
+                    }
+                    
+                    // ドラッグ中のイベント
+                    document.addEventListener('mousemove', dragMove);
+                    document.addEventListener('touchmove', dragMove, { passive: false });
+                    
+                    // ドラッグ終了時のイベント
+                    document.addEventListener('mouseup', stopDrag);
+                    document.addEventListener('touchend', stopDrag);
+                }
+            }
+            
+            // ドラッグ移動処理
+            function dragMove(e) {
+                if (!isDragging || !dragTarget) return;
+                e.preventDefault();
+                
+                let clientX, clientY;
+                if (e.type === 'mousemove') {
+                    clientX = e.clientX;
+                    clientY = e.clientY;
+                } else {
+                    clientX = e.touches[0].clientX;
+                    clientY = e.touches[0].clientY;
+                }
+                
+                const containerRect = imageContainer.getBoundingClientRect();
+                const imgRect = previewImage.getBoundingClientRect();
+                
+                // 画像内での位置を計算
+                let x = clientX - containerRect.left - dragOffsetX;
+                let y = clientY - containerRect.top - dragOffsetY;
+                
+                // 画像の範囲内に制限
+                x = Math.max(0, Math.min(x, imgRect.width));
+                y = Math.max(0, Math.min(y, imgRect.height));
+                
+                // 要素の位置を更新
+                dragTarget.style.left = `${x}px`;
+                dragTarget.style.top = `${y}px`;
+                
+                // 関節点データを更新
+                const jointId = dragTarget.getAttribute('data-joint-id');
+                jointPoints[jointId].x = x / imgRect.width;
+                jointPoints[jointId].y = y / imgRect.height;
+                
+                // UIの更新
+                updateJointControlUI(jointId);
+                
+                // 線の更新
+                drawLines();
+            }
+            
+            // ドラッグ終了処理
+            function stopDrag() {
+                isDragging = false;
+                dragTarget = null;
+                
+                document.removeEventListener('mousemove', dragMove);
+                document.removeEventListener('touchmove', dragMove);
+                document.removeEventListener('mouseup', stopDrag);
+                document.removeEventListener('touchend', stopDrag);
+            }
+            
+            // 関節点間の線を描画
+            function drawLines() {
+                // 既存の線をクリア
+                document.querySelectorAll('.joint-line').forEach(el => el.remove());
                 
                 const imgWidth = previewImage.clientWidth;
                 const imgHeight = previewImage.clientHeight;
                 
-                // 線の描画（例: 頭-肩-腰-膝-足首）
+                // 関節点の接続を定義
                 const connections = [
-                    ['1', '2'], // 頭 → 肩
-                    ['2', '3'], // 肩 → 腰
-                    ['3', '4'], // 腰 → 右膝
-                    ['3', '5'], // 腰 → 左膝
+                    ['1', '2'], // 鼻 → 右肩
+                    ['2', '3'], // 右肩 → 右腰
+                    ['3', '4'], // 右腰 → 右膝
                     ['4', '6'], // 右膝 → 右足首
-                    ['5', '7']  // 左膝 → 左足首
+                    ['3', '5'], // 右腰 → 左膝
+                    ['5', '7'], // 左膝 → 左足首
+                    ['2', '10'], // 右肩 → C7
                 ];
                 
+                // C7から腰への接続（飛び出し分析用）
+                if (jointPoints['10'] && jointPoints['3']) {
+                    connections.push(['10', '3']); // C7 → 右腰
+                }
+                
+                // 線を描画
                 connections.forEach(conn => {
                     if (jointPoints[conn[0]] && jointPoints[conn[1]]) {
                         const start = {
@@ -588,170 +666,52 @@
                         line.style.top = `${start.y}px`;
                         line.style.transform = `rotate(${angle}deg)`;
                         
+                        // C7から腰への線は特別な色
+                        if (conn[0] === '10' && conn[1] === '3') {
+                            line.style.backgroundColor = 'purple';
+                            line.style.height = '4px';
+                        }
+                        
                         imageContainer.appendChild(line);
                     }
                 });
-                
-                // 角度の計算と表示（例: 肩-腰-膝の角度）
-                const angles = [
-                    { name: '上半身角度', points: ['1', '2', '3'] }, // 頭-肩-腰
-                    { name: '右膝角度', points: ['3', '4', '6'] },  // 腰-右膝-右足首
-                    { name: '左膝角度', points: ['3', '5', '7'] }   // 腰-左膝-左足首
-                ];
-                
-                angles.forEach(angleData => {
-                    const [p1, p2, p3] = angleData.points;
-                    
-                    if (jointPoints[p1] && jointPoints[p2] && jointPoints[p3]) {
-                        const point1 = {
-                            x: jointPoints[p1].x * imgWidth,
-                            y: jointPoints[p1].y * imgHeight
-                        };
-                        const point2 = {
-                            x: jointPoints[p2].x * imgWidth,
-                            y: jointPoints[p2].y * imgHeight
-                        };
-                        const point3 = {
-                            x: jointPoints[p3].x * imgWidth,
-                            y: jointPoints[p3].y * imgHeight
-                        };
-                        
-                        // 角度の計算
-                        const a = np_array([point1.x, point1.y]);
-                        const b = np_array([point2.x, point2.y]);
-                        const c = np_array([point3.x, point3.y]);
-                        
-                        const ba = array_subtract(a, b);
-                        const bc = array_subtract(c, b);
-                        
-                        const cosine_angle = dot_product(ba, bc) / (norm(ba) * norm(bc));
-                        const angle = Math.acos(Math.max(-1, Math.min(1, cosine_angle))) * 180 / Math.PI;
-                        
-                        // 角度表示要素の作成
-                        const angleElement = document.createElement('div');
-                        angleElement.className = 'angle-text';
-                        angleElement.textContent = `${angle.toFixed(1)}°`;
-                        angleElement.style.left = `${point2.x}px`;
-                        angleElement.style.top = `${point2.y + 15}px`;
-                        
-                        imageContainer.appendChild(angleElement);
-                    }
-                });
-            }
-            
-            // NumPyライクの関数を実装
-            function np_array(arr) {
-                return arr;
-            }
-            
-            function array_subtract(a, b) {
-                return [a[0] - b[0], a[1] - b[1]];
-            }
-            
-            function dot_product(a, b) {
-                return a[0] * b[0] + a[1] * b[1];
-            }
-            
-            function norm(a) {
-                return Math.sqrt(a[0] * a[0] + a[1] * a[1]);
-            }
-            
-            // 関節点のドラッグ機能
-            function makeJointDraggable(element) {
-                let isDragging = false;
-                let offsetX, offsetY;
-                
-                element.addEventListener('mousedown', startDrag);
-                element.addEventListener('touchstart', startDrag, { passive: false });
-                
-                function startDrag(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    isDragging = true;
-                    
-                    // 関節点を選択状態にする
-                    if (currentMode === 'click' || currentMode === 'all') {
-                        selectJoint(element.getAttribute('data-joint-id'));
-                    }
-                    
-                    if (e.type === 'mousedown') {
-                        offsetX = e.clientX - element.getBoundingClientRect().left;
-                        offsetY = e.clientY - element.getBoundingClientRect().top;
-                    } else {
-                        offsetX = e.touches[0].clientX - element.getBoundingClientRect().left;
-                        offsetY = e.touches[0].clientY - element.getBoundingClientRect().top;
-                    }
-                    
-                    document.addEventListener('mousemove', dragMove);
-                    document.addEventListener('touchmove', dragMove, { passive: false });
-                    document.addEventListener('mouseup', stopDrag);
-                    document.addEventListener('touchend', stopDrag);
-                }
-                
-                function dragMove(e) {
-                    if (!isDragging) return;
-                    e.preventDefault();
-                    
-                    let clientX, clientY;
-                    if (e.type === 'mousemove') {
-                        clientX = e.clientX;
-                        clientY = e.clientY;
-                    } else {
-                        clientX = e.touches[0].clientX;
-                        clientY = e.touches[0].clientY;
-                    }
-                    
-                    const containerRect = imageContainer.getBoundingClientRect();
-                    const imgRect = previewImage.getBoundingClientRect();
-                    
-                    // 画像内での位置を計算
-                    let x = clientX - containerRect.left - offsetX;
-                    let y = clientY - containerRect.top - offsetY;
-                    
-                    // 画像の範囲内に制限
-                    x = Math.max(0, Math.min(x, imgRect.width));
-                    y = Math.max(0, Math.min(y, imgRect.height));
-                    
-                    // 要素の位置を更新
-                    element.style.left = `${x}px`;
-                    element.style.top = `${y}px`;
-                    
-                    // 関節点データを更新
-                    const jointId = element.getAttribute('data-joint-id');
-                    jointPoints[jointId] = {
-                        x: x / imgRect.width,
-                        y: y / imgRect.height
-                    };
-                    
-                    // 線と角度を更新
-                    drawLinesAndAngles();
-                }
-                
-                function stopDrag() {
-                    isDragging = false;
-                    document.removeEventListener('mousemove', dragMove);
-                    document.removeEventListener('touchmove', dragMove);
-                    document.removeEventListener('mouseup', stopDrag);
-                    document.removeEventListener('touchend', stopDrag);
-                }
             }
             
             // 関節点の選択
             function selectJoint(jointId) {
                 selectedJoint = jointId;
                 
-                // 関節点セレクタの値を更新
-                if (jointSelector) {
-                    jointSelector.value = jointId;
+                // プルダウンの値を更新
+                if (dropdownJointSelector) {
+                    dropdownJointSelector.value = jointId;
                 }
+                
+                // スライダーの値を更新
+                updateJointControlUI(jointId);
                 
                 // 関節点の描画を更新
                 renderJointPoints();
             }
             
+            // 関節点のコントロールUIを更新
+            function updateJointControlUI(jointId) {
+                if (!jointPoints[jointId]) return;
+                
+                const joint = jointPoints[jointId];
+                
+                // スライダーの値を更新
+                jointXInput.value = Math.round(joint.x * 100);
+                jointYInput.value = Math.round(joint.y * 100);
+                jointXValue.textContent = `${Math.round(joint.x * 100)}%`;
+                jointYValue.textContent = `${Math.round(joint.y * 100)}%`;
+                
+                // 調整パネルを表示
+                jointAdjustmentPanel.style.display = 'flex';
+            }
+            
             // 関節点のクリア
             function clearJointPoints() {
-                document.querySelectorAll('.joint-point, .joint-line, .angle-text').forEach(el => el.remove());
+                document.querySelectorAll('.joint-point, .joint-line').forEach(el => el.remove());
             }
             
             // エラー表示
@@ -813,24 +773,47 @@
                 
                 // 角度情報を表示
                 anglesContainer.innerHTML = '';
-                for (const [key, value] of Object.entries(analysis.angles)) {
-                    const angleElement = document.createElement('div');
-                    angleElement.className = 'mb-2';
+                
+                if (mode === 'set') {
+                    const angles = {
+                        '前足膝角度': analysis.angles.front_angle,
+                        '後足膝角度': analysis.angles.rear_angle,
+                        '前足股関節角度': analysis.angles.hip_angle
+                    };
                     
-                    // 角度名のマッピング
-                    let angleName = key;
-                    if (mode === 'set') {
-                        if (key === 'back_angle') angleName = '上半身角度';
-                        else if (key === 'knee_angle') angleName = '前足膝角度';
-                        else if (key === 'ankle_angle') angleName = '後足膝角度';
-                    } else {
-                        if (key === 'back_angle') angleName = '上半身角度';
-                        else if (key === 'knee_angle') angleName = '下半身角度';
-                        else if (key === 'ankle_angle') angleName = 'くの字角度';
+                    for (const [key, value] of Object.entries(angles)) {
+                        const angleElement = document.createElement('div');
+                        angleElement.className = 'mb-2';
+                        angleElement.innerHTML = `<strong>${key}:</strong> ${value}°`;
+                        anglesContainer.appendChild(angleElement);
                     }
                     
-                    angleElement.innerHTML = `<strong>${angleName}:</strong> ${value}°`;
-                    anglesContainer.appendChild(angleElement);
+                    // グラフの更新
+                    updateAnglesChart(
+                        ['前足膝角度', '後足膝角度', '前足股関節角度'],
+                        [analysis.angles.front_angle, analysis.angles.rear_angle, analysis.angles.hip_angle],
+                        [90, 125, 50]
+                    );
+                } else {
+                    const angles = {
+                        '下半身角度': analysis.angles.lower_angle,
+                        '上半身角度': analysis.angles.upper_angle,
+                        'くの字角度': analysis.angles.kunoji_angle
+                    };
+                    
+                    for (const [key, value] of Object.entries(angles)) {
+                        const angleElement = document.createElement('div');
+                        angleElement.className = 'mb-2';
+                        angleElement.innerHTML = `<strong>${key}:</strong> ${value}°`;
+                        anglesContainer.appendChild(angleElement);
+                    }
+                    
+                    // グラフの更新
+                    updateAnglesChart(
+                        ['下半身角度', '上半身角度', 'くの字角度'],
+                        [analysis.angles.lower_angle, analysis.angles.upper_angle, analysis.angles.kunoji_angle],
+                        [45, 40, 160]
+                    );
                 }
                 
                 // フィードバックを表示
@@ -839,11 +822,16 @@
                     const feedbackElement = document.createElement('div');
                     feedbackElement.className = 'feedback-item mb-2';
                     feedbackElement.textContent = feedback;
+                    
+                    // フィードバックに応じて色を変更
+                    if (feedback.includes('理想的')) {
+                        feedbackElement.style.backgroundColor = '#d1e7dd';
+                    } else if (feedback.includes('近づけ') || feedback.includes('意識')) {
+                        feedbackElement.style.backgroundColor = '#f8d7da';
+                    }
+                    
                     feedbackContainer.appendChild(feedbackElement);
                 });
-                
-                // グラフの更新
-                updateAnglesChart(analysis.angles, mode);
                 
                 // 分析結果を表示
                 analysisContainer.style.display = 'block';
@@ -851,31 +839,8 @@
             }
             
             // 角度グラフの更新
-            function updateAnglesChart(angles, mode) {
+            function updateAnglesChart(labels, values, idealValues) {
                 const ctx = document.getElementById('angles-chart').getContext('2d');
-                
-                // グラフのラベルとデータを設定
-                let labels = [];
-                let data = [];
-                let idealValues = [];
-                
-                if (mode === 'set') {
-                    labels = ['上半身角度', '前足膝角度', '後足膝角度'];
-                    data = [
-                        angles.back_angle || 0,
-                        angles.knee_angle || 0,
-                        angles.ankle_angle || 0
-                    ];
-                    idealValues = [45, 90, 85]; // 理想的な値
-                } else {
-                    labels = ['上半身角度', '下半身角度', 'くの字角度'];
-                    data = [
-                        angles.back_angle || 0,
-                        angles.knee_angle || 0,
-                        angles.ankle_angle || 0
-                    ];
-                    idealValues = [40, 110, 150]; // 理想的な値
-                }
                 
                 // 既存のグラフを破棄
                 if (anglesChart) {
@@ -889,14 +854,14 @@
                         labels: labels,
                         datasets: [
                             {
-                                label: '現在の角度',
-                                data: data,
+                                label: '測定値',
+                                data: values,
                                 backgroundColor: 'rgba(54, 162, 235, 0.6)',
                                 borderColor: 'rgba(54, 162, 235, 1)',
                                 borderWidth: 1
                             },
                             {
-                                label: '理想的な角度',
+                                label: '理想値',
                                 data: idealValues,
                                 backgroundColor: 'rgba(255, 99, 132, 0.2)',
                                 borderColor: 'rgba(255, 99, 132, 1)',
@@ -909,7 +874,7 @@
                         scales: {
                             y: {
                                 beginAtZero: true,
-                                max: 180
+                                max: Math.max(...values, ...idealValues) * 1.2
                             }
                         },
                         responsive: true,
@@ -929,149 +894,38 @@
                     currentMode = this.getAttribute('data-mode');
                     
                     // コントロールパネルの表示切替
-                    arrowControls.style.display = currentMode === 'arrow' ? 'block' : 'none';
                     dropdownControls.style.display = currentMode === 'dropdown' ? 'block' : 'none';
-                    
-                    // 関節点の表示を更新
-                    renderJointPoints();
+                    horizontalControls.style.display = currentMode === 'horizontal' ? 'block' : 'none';
                 });
             });
             
-            // 方向キーコントロールのイベント設定
-            document.querySelectorAll('.arrow-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    if (!selectedJoint || !jointPoints[selectedJoint]) return;
-                    
-                    const dir = this.getAttribute('data-dir');
-                    const imgWidth = previewImage.clientWidth;
-                    const imgHeight = previewImage.clientHeight;
-                    const step = 0.005; // 移動のステップサイズ
-                    
-                    let dx = 0, dy = 0;
-                    
-                    // 方向に基づいて移動量を設定
-                    switch (dir) {
-                        case 'n': dy = -step; break;
-                        case 's': dy = step; break;
-                        case 'e': dx = step; break;
-                        case 'w': dx = -step; break;
-                        case 'ne': dx = step; dy = -step; break;
-                        case 'nw': dx = -step; dy = -step; break;
-                        case 'se': dx = step; dy = step; break;
-                        case 'sw': dx = -step; dy = step; break;
-                        case 'c': break; // 中央ボタンは移動なし
-                    }
-                    
-                    // 関節点の位置を更新
-                    jointPoints[selectedJoint].x = Math.max(0, Math.min(1, jointPoints[selectedJoint].x + dx));
-                    jointPoints[selectedJoint].y = Math.max(0, Math.min(1, jointPoints[selectedJoint].y + dy));
-                    
-                    // 関節点の表示を更新
-                    renderJointPoints();
-                });
+            // プルダウン選択した関節点の表示ボタン
+            showSelectedJointBtn.addEventListener('click', function() {
+                const jointId = dropdownJointSelector.value;
+                selectJoint(jointId);
             });
             
-            // ジョイントセレクタの変更イベント
-            if (jointSelector) {
-                jointSelector.addEventListener('change', function() {
-                    selectJoint(this.value);
-                });
-            }
-            
-            // プルダウン選択モードのジョイント表示ボタン
-            document.getElementById('show-selected-joint').addEventListener('click', function() {
-                const selectedValue = document.getElementById('dropdown-joint-selector').value;
-                selectJoint(selectedValue);
-            });
-            
-            // 画像クリックで関節点を配置（クリックモード）
-            imageContainer.addEventListener('click', function(e) {
-                if (currentMode !== 'click' || !selectedJoint) return;
+            // X座標スライダーのイベント
+            jointXInput.addEventListener('input', function() {
+                if (!selectedJoint || !jointPoints[selectedJoint]) return;
                 
-                const rect = imageContainer.getBoundingClientRect();
-                const imgRect = previewImage.getBoundingClientRect();
+                const value = parseInt(this.value) / 100;
+                jointXValue.textContent = `${this.value}%`;
                 
-                // クリック位置を計算
-                const x = e.clientX - rect.left;
-                const y = e.clientY - rect.top;
-                
-                // 画像内の相対位置に変換
-                const relX = x / imgRect.width;
-                const relY = y / imgRect.height;
-                
-                // 関節点データを更新
-                jointPoints[selectedJoint] = { x: relX, y: relY };
-                
-                // 関節点を再描画
+                jointPoints[selectedJoint].x = value;
                 renderJointPoints();
             });
             
-            // 画像ダウンロードボタン
-            downloadBtn.addEventListener('click', function() {
-                if (!previewImage.src) {
-                    showError('ダウンロードする画像がありません。');
-                    return;
-                }
+            // Y座標スライダーのイベント
+            jointYInput.addEventListener('input', function() {
+                if (!selectedJoint || !jointPoints[selectedJoint]) return;
                 
-                // Canvas要素を作成し、画像と関節点・線を描画
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
+                const value = parseInt(this.value) / 100;
+                jointYValue.textContent = `${this.value}%`;
                 
-                // 画像のサイズに合わせる
-                canvas.width = previewImage.naturalWidth;
-                canvas.height = previewImage.naturalHeight;
-                
-                // 画像を描画
-                const img = new Image();
-                img.onload = function() {
-                    ctx.drawImage(img, 0, 0);
-                    
-                    // 関節点と線を描画（スケールを調整）
-                    const scaleX = img.naturalWidth / previewImage.clientWidth;
-                    const scaleY = img.naturalHeight / previewImage.clientHeight;
-                    
-                    // 線を描画
-                    document.querySelectorAll('.joint-line').forEach(line => {
-                        const left = parseFloat(line.style.left) * scaleX;
-                        const top = parseFloat(line.style.top) * scaleY;
-                        const width = parseFloat(line.style.width) * scaleX;
-                        const transform = line.style.transform;
-                        const angle = parseFloat(transform.replace('rotate(', '').replace('deg)', ''));
-                        
-                        ctx.save();
-                        ctx.translate(left, top);
-                        ctx.rotate(angle * Math.PI / 180);
-                        ctx.fillStyle = 'yellow';
-                        ctx.fillRect(0, -1 * scaleY, width, 2 * scaleY);
-                        ctx.restore();
-                    });
-                    
-                    // 関節点を描画
-                    document.querySelectorAll('.joint-point').forEach(point => {
-                        const left = parseFloat(point.style.left) * scaleX;
-                        const top = parseFloat(point.style.top) * scaleY;
-                        const radius = 6 * scaleX;
-                        
-                        ctx.beginPath();
-                        ctx.arc(left, top, radius, 0, 2 * Math.PI);
-                        ctx.fillStyle = 'red';
-                        ctx.fill();
-                        ctx.strokeStyle = 'white';
-                        ctx.lineWidth = 2;
-                        ctx.stroke();
-                    });
-                    
-                    // 角度テキストを描画
-                    document.querySelectorAll('.angle-text').forEach(text => {
-                        const left = parseFloat(text.style.left) * scaleX;
-                        const top = parseFloat(text.style.top) * scaleY;
-                        
-                        ctx.font = `${12 * scaleX}px Arial`;
-                        ctx.fillStyle = 'white';
-                        ctx.strokeStyle = 'black';
-                        ctx.lineWidth = 3;
-                        ctx.strokeText(text.textContent, left, top);
-                        ctx.fillText(text.textContent, left, top);
-                    });
-                    
-                
+                jointPoints[selectedJoint].y = value;
+                renderJointPoints();
+            });
+            
+            // 横並び表示モードの関節点調整ボタン
+            jointAdj
