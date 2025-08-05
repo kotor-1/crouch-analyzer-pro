@@ -3,193 +3,679 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🏃 クラウチングスタート姿勢分析プロ</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>クラウチングスタート姿勢分析</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        .card {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1.5rem;
+            border: none;
+            border-radius: 8px;
+        }
+        .card-header {
+            font-weight: 600;
+            border-bottom: none;
+            padding: 1rem 1.25rem;
+        }
+        .btn-primary {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+        .btn-success {
+            background-color: #198754;
+            border-color: #198754;
+        }
+        .btn-info {
+            background-color: #0dcaf0;
+            border-color: #0dcaf0;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            border-color: #ffc107;
+            color: #333;
+        }
+        .joint-point {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background-color: red;
+            border: 2px solid white;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            cursor: move;
+            user-select: none;
+        }
+        .joint-line {
+            position: absolute;
+            background-color: yellow;
+            height: 2px;
+            transform-origin: 0 0;
+            z-index: 90;
+        }
+        .joint-label {
+            position: absolute;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 12px;
+            transform: translate(-50%, -100%);
+            z-index: 110;
+            pointer-events: none;
+        }
+        .image-container {
+            position: relative;
+            margin: 0 auto;
+            overflow: hidden;
+            background-color: #000;
+            border-radius: 8px;
+        }
+        #status-message {
+            min-height: 60px;
+        }
+        .result-card {
+            transition: all 0.3s ease;
+        }
+        .angle-badge {
+            font-size: 1.1rem;
+            padding: 0.5rem 0.8rem;
+        }
+        .feature-badge {
+            font-size: 0.8rem;
+            padding: 0.3rem 0.5rem;
+            margin-right: 0.3rem;
+        }
+        .dragging {
+            cursor: grabbing;
+        }
+        .drag-helper {
+            position: fixed;
+            width: 20px;
+            height: 20px;
+            background-color: rgba(255, 255, 255, 0.7);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1000;
+            display: none;
+        }
+        .app-title {
+            color: #0d6efd;
+            font-weight: 700;
+        }
+        .app-subtitle {
+            color: #6c757d;
+            font-weight: 300;
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 2rem;
+            height: 2rem;
+            border: 0.25rem solid #f3f3f3;
+            border-top: 0.25rem solid #0d6efd;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="row">
-            <div class="col-12">
-                <h1 class="text-center my-4">🏃 クラウチングスタート姿勢分析プロ</h1>
-                <p class="text-center text-muted">🎯 チーム共有対応・本格分析ツール</p>
+    <div class="drag-helper" id="drag-helper"></div>
+    
+    <div class="container py-4">
+        <header class="text-center mb-4">
+            <h1 class="app-title">クラウチングスタート姿勢分析</h1>
+            <p class="app-subtitle">スタート技術向上のための分析ツール</p>
+            
+            <div class="d-flex justify-content-center mb-2">
+                <span class="badge bg-primary feature-badge">関節角度計測</span>
+                <span class="badge bg-success feature-badge">AI姿勢検出</span>
+                <span class="badge bg-info feature-badge">セット姿勢分析</span>
+                <span class="badge bg-warning feature-badge">飛び出し分析</span>
             </div>
-        </div>
-        
+        </header>
+
         <div class="row">
-            <!-- 左側：画像表示エリア -->
-            <div class="col-lg-8">
+            <!-- 左カラム：画像アップロード＆表示エリア -->
+            <div class="col-lg-7 mb-4">
                 <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5>📷 画像アップロード＆関節点調整</h5>
-                        <div>
-                            <select class="form-select" id="adjustmentMode" style="width: 200px;">
-                                <option value="click">❶ クリック選択</option>
-                                <option value="direction">❷ 方向キー調整</option>
-                                <option value="dropdown">❃ プルダウン選択</option>
-                                <option value="batch">❹ 一括表示</option>
-                            </select>
-                        </div>
+                    <div class="card-header bg-primary text-white">
+                        画像アップロード＆姿勢調整
                     </div>
                     <div class="card-body">
-                        <!-- ドラッグ&ドロップエリア -->
-                        <div id="dropArea" class="drop-area mb-3">
-                            <div class="drop-content">
-                                <i class="bi bi-cloud-upload" style="font-size: 3rem; color: #667eea;"></i>
-                                <p class="mt-2">📁 ファイルをドラッグ&ドロップ または クリックして選択</p>
-                                <p class="text-muted small">JPG, PNG, WEBP 対応 (最大16MB)</p>
+                        <form id="upload-form" class="mb-3">
+                            <div class="mb-3">
+                                <input type="file" class="form-control" id="image-file" accept="image/jpeg,image/png,image/webp">
+                                <div class="form-text">JPG、PNG、WEBP形式の画像をアップロードしてください</div>
                             </div>
-                            <input type="file" class="form-control d-none" id="imageUpload" accept="image/*">
+                            <button type="submit" class="btn btn-primary">アップロード</button>
+                        </form>
+                        
+                        <div id="status-message"></div>
+                        
+                        <div id="image-container" class="image-container mt-3" style="display: none;">
+                            <img id="preview-image" class="img-fluid" alt="アップロードされた画像">
+                            <!-- 関節点はJavaScriptで動的に追加 -->
                         </div>
                         
-                        <!-- 画像表示エリア -->
-                        <div id="imageContainer" class="text-center position-relative">
-                            <p class="text-muted">画像をアップロードしてください</p>
-                        </div>
-                        
-                        <!-- キャンバス（画像上に関節点を描画） -->
-                        <canvas id="imageCanvas" style="display: none; border: 2px solid #ddd; cursor: crosshair;"></canvas>
-                        
-                        <!-- 方向キーコントロール（方向キーモード時のみ表示） -->
-                        <div id="directionControls" style="display: none;" class="mt-3">
-                            <h6>🎯 方向キー調整</h6>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <label>移動距離:</label>
-                                    <select class="form-select" id="moveStep">
-                                        <option value="1">1px</option>
-                                        <option value="2">2px</option>
-                                        <option value="5" selected>5px</option>
-                                        <option value="10">10px</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="text-center mt-3">
-                                <div class="direction-pad">
-                                    <div class="row">
-                                        <div class="col-4"></div>
-                                        <div class="col-4">
-                                            <button class="btn btn-outline-primary w-100" id="moveUp">🔼</button>
-                                        </div>
-                                        <div class="col-4"></div>
-                                    </div>
-                                    <div class="row mt-1">
-                                        <div class="col-4">
-                                            <button class="btn btn-outline-primary w-100" id="moveLeft">◀️</button>
-                                        </div>
-                                        <div class="col-4">
-                                            <!-- 中央部分は空にする -->
-                                        </div>
-                                        <div class="col-4">
-                                            <button class="btn btn-outline-primary w-100" id="moveRight">▶️</button>
-                                        </div>
-                                    </div>
-                                    <div class="row mt-1">
-                                        <div class="col-4"></div>
-                                        <div class="col-4">
-                                            <button class="btn btn-outline-primary w-100" id="moveDown">🔽</button>
-                                        </div>
-                                        <div class="col-4"></div>
-                                    </div>
-                                </div>
+                        <div class="mt-3" id="detection-info" style="display: none;">
+                            <div class="alert alert-info">
+                                <h5 class="alert-heading">操作方法</h5>
+                                <p>各関節点をドラッグして位置を調整できます。正確な姿勢分析のために、関節点を適切な位置に配置してください。</p>
+                                <hr>
+                                <p class="mb-0" id="detection-method"></p>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
             
-            <!-- 右側：コントロールパネル -->
-            <div class="col-lg-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h5>🎯 関節点調整</h5>
+            <!-- 右カラム：分析ツール＆結果表示 -->
+            <div class="col-lg-5">
+                <div class="card mb-4">
+                    <div class="card-header bg-success text-white">
+                        分析ツール
                     </div>
                     <div class="card-body">
-                        <!-- 選択中の関節点表示 -->
-                        <div class="alert alert-info" id="selectedJointInfo">
-                            関節点を選択してください
+                        <div class="d-grid gap-2 mb-3">
+                            <button class="btn btn-success" id="analyze-set">セット姿勢分析</button>
+                            <button class="btn btn-info" id="analyze-takeoff">飛び出し分析</button>
                         </div>
                         
-                        <!-- 関節点選択ボタン -->
-                        <div class="mb-3" id="jointButtonsContainer">
-                            <h6>関節点を選択:</h6>
-                            <div class="d-grid gap-2" id="jointButtons">
-                                <!-- JavaScriptで動的生成 -->
-                            </div>
+                        <div class="alert alert-warning" id="analysis-tip">
+                            画像をアップロードし、関節点を調整してから分析を実行してください。
                         </div>
                         
-                        <!-- プルダウン選択（プルダウンモード時のみ表示） -->
-                        <div class="mb-3" id="dropdownSelection" style="display: none;">
-                            <h6>関節点選択:</h6>
-                            <select class="form-select" id="jointDropdown">
-                                <!-- JavaScriptで動的生成 -->
-                            </select>
-                        </div>
-                        
-                        <!-- 数値入力調整 -->
-                        <div class="mb-3" id="numericAdjustment" style="display: none;">
-                            <h6>数値調整:</h6>
-                            <div class="row">
-                                <div class="col-6">
-                                    <label class="form-label">X座標</label>
-                                    <input type="number" class="form-control" id="xCoord">
-                                </div>
-                                <div class="col-6">
-                                    <label class="form-label">Y座標</label>
-                                    <input type="number" class="form-control" id="yCoord">
+                        <div id="result-container" style="display: none;">
+                            <div class="card result-card mb-3">
+                                <div class="card-header" id="result-title">分析結果</div>
+                                <div class="card-body" id="result-content">
+                                    <!-- 分析結果がここに表示されます -->
                                 </div>
                             </div>
-                        </div>
-                        
-                        <!-- 一括調整（一括モード時のみ表示） -->
-                        <div id="batchAdjustment" style="display: none;">
-                            <h6>一括調整:</h6>
-                            <div id="batchControls">
-                                <!-- JavaScriptで動的生成 -->
+                            
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary" id="share-result" disabled>
+                                    結果を共有 <i class="bi bi-share"></i>
+                                </button>
                             </div>
-                        </div>
-                        
-                        <!-- 分析モード選択 -->
-                        <div class="mb-3">
-                            <h6>分析モード:</h6>
-                            <select class="form-select" id="analysisMode">
-                                <option value="set">セット姿勢</option>
-                                <option value="takeoff">飛び出し分析</option>
-                            </select>
-                        </div>
-                        
-                        <!-- 分析実行ボタン -->
-                        <button class="btn btn-primary w-100 mb-3" id="analyzeBtn" disabled>
-                            📊 姿勢分析実行
-                        </button>
-                        
-                        <!-- 結果ダウンロードボタン -->
-                        <button class="btn btn-success w-100 mb-3" id="downloadBtn" style="display: none;">
-                            💾 結果をダウンロード
-                        </button>
-                        
-                        <!-- 分析結果表示 -->
-                        <div id="analysisResults">
-                            <!-- 分析結果がここに表示される -->
                         </div>
                     </div>
                 </div>
                 
-                <!-- グラフ表示エリア -->
-                <div class="card mt-3" id="chartCard" style="display: none;">
-                    <div class="card-header">
-                        <h5>📊 角度グラフ</h5>
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        システム情報
                     </div>
                     <div class="card-body">
-                        <canvas id="angleChart" width="400" height="200"></canvas>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span>AI姿勢検出：</span>
+                            <span id="ai-status" class="badge bg-secondary">確認中...</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span>分析エンジン：</span>
+                            <span id="analysis-engine" class="badge bg-secondary">確認中...</span>
+                        </div>
+                        <div class="text-center mt-3">
+                            <a href="/debug" target="_blank" class="btn btn-sm btn-outline-secondary">詳細情報</a>
+                            <a href="/simple-upload" target="_blank" class="btn btn-sm btn-outline-primary">簡易アップローダー</a>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM要素の参照を取得
+            const form = document.getElementById('upload-form');
+            const fileInput = document.getElementById('image-file');
+            const previewImage = document.getElementById('preview-image');
+            const imageContainer = document.getElementById('image-container');
+            const statusMessage = document.getElementById('status-message');
+            const detectInfo = document.getElementById('detection-info');
+            const detectMethod = document.getElementById('detection-method');
+            const analyzeSetBtn = document.getElementById('analyze-set');
+            const analyzeTakeoffBtn = document.getElementById('analyze-takeoff');
+            const resultContainer = document.getElementById('result-container');
+            const resultTitle = document.getElementById('result-title');
+            const resultContent = document.getElementById('result-content');
+            const analysisTip = document.getElementById('analysis-tip');
+            const shareResultBtn = document.getElementById('share-result');
+            const aiStatus = document.getElementById('ai-status');
+            const analysisEngine = document.getElementById('analysis-engine');
+            const dragHelper = document.getElementById('drag-helper');
+            
+            // システム情報を取得
+            fetch('/api/health')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.mediapipe_available) {
+                        aiStatus.textContent = '利用可能';
+                        aiStatus.className = 'badge bg-success';
+                    } else {
+                        aiStatus.textContent = '無効';
+                        aiStatus.className = 'badge bg-warning text-dark';
+                    }
+                    
+                    analysisEngine.textContent = data.dependencies_available ? 'フル機能' : '基本モード';
+                    analysisEngine.className = data.dependencies_available ? 'badge bg-success' : 'badge bg-warning text-dark';
+                })
+                .catch(error => {
+                    console.error('システム情報取得エラー:', error);
+                    aiStatus.textContent = '不明';
+                    aiStatus.className = 'badge bg-danger';
+                    analysisEngine.textContent = '不明';
+                    analysisEngine.className = 'badge bg-danger';
+                });
+            
+            // 状態変数
+            let keypoints = {};
+            let imageWidth = 0;
+            let imageHeight = 0;
+            let containerScale = 1;
+            let activeJoint = null;
+            let isDragging = false;
+            
+            // 関節点の表示
+            function renderJointPoints() {
+                // 既存の関節点と線を削除
+                document.querySelectorAll('.joint-point, .joint-line, .joint-label').forEach(el => el.remove());
+                
+                // スケールを計算
+                const containerWidth = imageContainer.clientWidth;
+                containerScale = containerWidth / imageWidth;
+                
+                // 関節点を描画
+                for (const [name, point] of Object.entries(keypoints)) {
+                    // 関節点の作成
+                    const jointPoint = document.createElement('div');
+                    jointPoint.className = 'joint-point';
+                    jointPoint.id = `joint-${name}`;
+                    jointPoint.style.left = `${point.x * containerScale}px`;
+                    jointPoint.style.top = `${point.y * containerScale}px`;
+                    jointPoint.dataset.name = name;
+                    
+                    // 関節点のラベル
+                    const jointLabel = document.createElement('div');
+                    jointLabel.className = 'joint-label';
+                    jointLabel.textContent = name;
+                    jointLabel.style.left = `${point.x * containerScale}px`;
+                    jointLabel.style.top = `${point.y * containerScale}px`;
+                    
+                    // ドラッグイベントハンドラを設定
+                    jointPoint.addEventListener('mousedown', startDragging);
+                    jointPoint.addEventListener('touchstart', startDragging, { passive: false });
+                    
+                    // 要素を追加
+                    imageContainer.appendChild(jointPoint);
+                    imageContainer.appendChild(jointLabel);
+                }
+                
+                // 線を描画
+                drawJointLines();
+            }
+            
+            // 関節点をつなぐ線を描画
+            function drawJointLines() {
+                // 線を描画する関節点のペア
+                const connections = [
+                    ['LShoulder', 'RShoulder'],
+                    ['LShoulder', 'LHip'],
+                    ['RShoulder', 'RHip'],
+                    ['LHip', 'RHip'],
+                    ['LHip', 'LKnee'],
+                    ['RHip', 'RKnee'],
+                    ['LKnee', 'LAnkle'],
+                    ['RKnee', 'RAnkle'],
+                    ['LShoulder', 'C7'],
+                    ['RShoulder', 'C7']
+                ];
+                
+                // 各接続について線を描画
+                connections.forEach(([start, end]) => {
+                    if (keypoints[start] && keypoints[end]) {
+                        const startPoint = keypoints[start];
+                        const endPoint = keypoints[end];
+                        
+                        const dx = (endPoint.x - startPoint.x) * containerScale;
+                        const dy = (endPoint.y - startPoint.y) * containerScale;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+                        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                        
+                        const line = document.createElement('div');
+                        line.className = 'joint-line';
+                        line.style.width = `${length}px`;
+                        line.style.left = `${startPoint.x * containerScale}px`;
+                        line.style.top = `${startPoint.y * containerScale}px`;
+                        line.style.transform = `rotate(${angle}deg)`;
+                        
+                        imageContainer.appendChild(line);
+                    }
+                });
+            }
+            
+            // ドラッグ開始
+            function startDragging(e) {
+                e.preventDefault();
+                
+                // タッチイベントの場合はタッチ情報を取得
+                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                
+                activeJoint = e.currentTarget;
+                isDragging = true;
+                
+                // ドラッグヘルパーを表示
+                dragHelper.style.display = 'block';
+                dragHelper.style.left = `${clientX}px`;
+                dragHelper.style.top = `${clientY}px`;
+                
+                // クラスを追加
+                activeJoint.classList.add('dragging');
+                
+                // イベントリスナーを追加
+                document.addEventListener('mousemove', moveJoint);
+                document.addEventListener('touchmove', moveJoint, { passive: false });
+                document.addEventListener('mouseup', stopDragging);
+                document.addEventListener('touchend', stopDragging);
+            }
+            
+            // 関節点の移動
+            function moveJoint(e) {
+                if (!isDragging || !activeJoint) return;
+                
+                e.preventDefault();
+                
+                // タッチイベントの場合はタッチ情報を取得
+                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+                
+                // ドラッグヘルパーを更新
+                dragHelper.style.left = `${clientX}px`;
+                dragHelper.style.top = `${clientY}px`;
+                
+                // コンテナ内の位置を計算
+                const rect = imageContainer.getBoundingClientRect();
+                const x = (clientX - rect.left) / containerScale;
+                const y = (clientY - rect.top) / containerScale;
+                
+                // 画像範囲内に制限
+                const boundedX = Math.max(0, Math.min(imageWidth, x));
+                const boundedY = Math.max(0, Math.min(imageHeight, y));
+                
+                // キーポイントを更新
+                const jointName = activeJoint.dataset.name;
+                keypoints[jointName] = { x: boundedX, y: boundedY };
+                
+                // 表示を更新
+                activeJoint.style.left = `${boundedX * containerScale}px`;
+                activeJoint.style.top = `${boundedY * containerScale}px`;
+                
+                // ラベルも更新
+                const label = document.querySelector(`.joint-label:nth-of-type(${Array.from(document.querySelectorAll('.joint-point')).indexOf(activeJoint) + 1})`);
+                if (label) {
+                    label.style.left = `${boundedX * containerScale}px`;
+                    label.style.top = `${boundedY * containerScale}px`;
+                }
+                
+                // 線を再描画
+                document.querySelectorAll('.joint-line').forEach(el => el.remove());
+                drawJointLines();
+            }
+            
+            // ドラッグ終了
+            function stopDragging() {
+                if (!isDragging) return;
+                
+                isDragging = false;
+                
+                // ドラッグヘルパーを非表示
+                dragHelper.style.display = 'none';
+                
+                // クラスを削除
+                if (activeJoint) {
+                    activeJoint.classList.remove('dragging');
+                    activeJoint = null;
+                }
+                
+                // イベントリスナーを削除
+                document.removeEventListener('mousemove', moveJoint);
+                document.removeEventListener('touchmove', moveJoint);
+                document.removeEventListener('mouseup', stopDragging);
+                document.removeEventListener('touchend', stopDragging);
+            }
+            
+            // ステータスメッセージを表示
+            function showStatus(message, type = 'info') {
+                statusMessage.innerHTML = `<div class="alert alert-${type}" role="alert">${message}</div>`;
+            }
+            
+            // 画像アップロードフォーム送信処理
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                if (!fileInput.files || !fileInput.files[0]) {
+                    showStatus('画像ファイルを選択してください', 'warning');
+                    return;
+                }
+                
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                showStatus('<div class="d-flex align-items-center"><div class="loading-spinner me-2"></div> 画像をアップロード中...</div>', 'info');
+                
+                // 画像アップロード
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`サーバーエラー: ${response.status}`);
+                    }
+                    return response.text();  // まずテキストとして取得
+                })
+                .then(text => {
+                    try {
+                        return JSON.parse(text);  // JSONとしてパース
+                    } catch (e) {
+                        console.error('JSONパースエラー:', e);
+                        console.error('受信テキスト:', text);
+                        throw new Error('サーバーからの応答を解析できませんでした');
+                    }
+                })
+                .then(data => {
+                    if (data.success) {
+                        // 画像を表示
+                        previewImage.onload = function() {
+                            imageContainer.style.display = 'block';
+                            detectInfo.style.display = 'block';
+                            analysisTip.textContent = '関節点の位置を調整してから分析ボタンをクリックしてください。';
+                            
+                            // 関節点情報を保存
+                            keypoints = data.keypoints;
+                            imageWidth = data.image_width;
+                            imageHeight = data.image_height;
+                            
+                            // 関節点を表示
+                            renderJointPoints();
+                            
+                            // 検出方法を表示
+                            detectMethod.textContent = data.detection_method;
+                            
+                            // ステータスを更新
+                            showStatus(
+                                data.ai_detection_used ? 
+                                'AIが自動で関節点を検出しました。必要に応じて調整してください。' : 
+                                'デフォルトの関節点位置を設定しました。各関節点を正確な位置にドラッグしてください。', 
+                                'success'
+                            );
+                        };
+                        
+                        // キャッシュ回避のためのタイムスタンプを追加
+                        previewImage.src = `${data.image_url}?t=${Date.now()}`;
+                    } else {
+                        showStatus(`エラー: ${data.error}`, 'danger');
+                        
+                        // コンソールに詳細情報を出力
+                        console.error('アップロードエラー:', data);
+                    }
+                })
+                .catch(error => {
+                    showStatus(`アップロードに失敗しました: ${error.message}`, 'danger');
+                    console.error('アップロードエラー:', error);
+                });
+            });
+            
+            // セット姿勢分析ボタン
+            analyzeSetBtn.addEventListener('click', function() {
+                if (Object.keys(keypoints).length === 0) {
+                    showStatus('先に画像をアップロードしてください', 'warning');
+                    return;
+                }
+                
+                analyzePosture('set');
+            });
+            
+            // 飛び出し分析ボタン
+            analyzeTakeoffBtn.addEventListener('click', function() {
+                if (Object.keys(keypoints).length === 0) {
+                    showStatus('先に画像をアップロードしてください', 'warning');
+                    return;
+                }
+                
+                analyzePosture('takeoff');
+            });
+            
+            // 姿勢分析を実行
+            function analyzePosture(mode) {
+                showStatus('<div class="d-flex align-items-center"><div class="loading-spinner me-2"></div> 分析中...</div>', 'info');
+                
+                fetch('/analyze', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        keypoints: keypoints,
+                        analysis_mode: mode
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`サーバーエラー: ${response.status}`);
+                    }
+                    return response.text();  // まずテキストとして取得
+                })
+                .then(text => {
+                    try {
+                        return JSON.parse(text);  // JSONとしてパース
+                    } catch (e) {
+                        console.error('JSONパースエラー:', e);
+                        console.error('受信テキスト:', text);
+                        throw new Error('サーバーからの応答を解析できませんでした');
+                    }
+                })
+                .then(data => {
+                    if (data.success) {
+                        // 分析結果を表示
+                        displayResults(data);
+                        showStatus('分析完了！結果を確認してください', 'success');
+                    } else {
+                        showStatus(`分析エラー: ${data.error}`, 'danger');
+                    }
+                })
+                .catch(error => {
+                    showStatus(`分析に失敗しました: ${error.message}`, 'danger');
+                    console.error('分析エラー:', error);
+                });
+            }
+            
+            // 分析結果を表示
+            function displayResults(data) {
+                resultContainer.style.display = 'block';
+                
+                // 分析タイプに応じてタイトルを変更
+                if (data.analysis_type === 'set') {
+                    resultTitle.textContent = 'セット姿勢分析結果';
+                    resultTitle.className = 'card-header bg-success text-white';
+                    
+                    // セット姿勢の結果表示
+                    resultContent.innerHTML = `
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                前足膝角度
+                                <span class="badge bg-success rounded-pill angle-badge">${data.front_angle || 'N/A'}°</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                後足膝角度
+                                <span class="badge bg-success rounded-pill angle-badge">${data.rear_angle || 'N/A'}°</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                前足股関節角度
+                                <span class="badge bg-success rounded-pill angle-badge">${data.front_hip_angle || 'N/A'}°</span>
+                            </li>
+                        </ul>
+                        <div class="mt-3 small text-muted">
+                            一般的には、前足膝角度は90°前後、後足膝角度は120°〜140°程度が推奨されます。
+                        </div>
+                    `;
+                } else if (data.analysis_type === 'takeoff') {
+                    resultTitle.textContent = '飛び出し分析結果';
+                    resultTitle.className = 'card-header bg-info text-white';
+                    
+                    // 飛び出し分析の結果表示
+                    resultContent.innerHTML = `
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                下半身角度
+                                <span class="badge bg-info rounded-pill angle-badge">${data.lower_angle || 'N/A'}°</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                上半身角度
+                                <span class="badge bg-info rounded-pill angle-badge">${data.upper_angle || 'N/A'}°</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                くの字角度
+                                <span class="badge bg-info rounded-pill angle-badge">${data.kunoji_angle || 'N/A'}°</span>
+                            </li>
+                        </ul>
+                        <div class="mt-3 small text-muted">
+                            理想的な飛び出しでは、上半身と下半身の角度差が小さく、くの字角度が大きいほど推進力が得られます。
+                        </div>
+                    `;
+                }
+                
+                // 共有ボタンを有効化（将来の機能）
+                shareResultBtn.disabled = false;
+            }
+            
+            // 共有ボタン
+            shareResultBtn.addEventListener('click', function() {
+                alert('この機能は現在開発中です。将来のアップデートで利用可能になります。');
+            });
+            
+            // ウィンドウリサイズ時に関節点の位置を更新
+            window.addEventListener('resize', function() {
+                if (Object.keys(keypoints).length > 0) {
+                    renderJointPoints();
+                }
+            });
+        });
+    </script>
 </body>
 </html>
