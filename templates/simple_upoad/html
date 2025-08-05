@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>シンプルアップロード</title>
+</head>
+<body>
+    <h1>シンプルな画像アップロード</h1>
+    <form action="/simple_upload" method="POST" enctype="multipart/form-data">
+        <input type="file" name="file">
+        <button type="submit">アップロード</button>
+    </form>
+</body>
+</html>
