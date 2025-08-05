@@ -1,10 +1,12 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, render_template_string
 import math
 from PIL import Image
 import io
 import base64
 import os
 import sys
+import json
+import traceback
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -13,6 +15,12 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # アップロードフォルダが存在しない場合は作成
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+print(f"Upload folder created/exists: {app.config['UPLOAD_FOLDER']}")
+print(f"Upload folder is writable: {os.access(app.config['UPLOAD_FOLDER'], os.W_OK)}")
+try:
+    print(f"Upload folder contents: {os.listdir(app.config['UPLOAD_FOLDER'])}")
+except Exception as e:
+    print(f"Error listing upload folder: {e}")
 
 # 依存関係が失敗してもアプリが動作するように修正
 DEPENDENCIES_AVAILABLE = True
@@ -66,6 +74,7 @@ DEFAULT_JOINTS = {
 }
 
 def allowed_file(filename):
+    """許可されたファイル拡張子かチェック"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 def calculate_angle(point1, point2, point3):
@@ -168,19 +177,27 @@ def analyze_crouch_angles(keypoints, analysis_type="set"):
         return analysis_result
         
     except Exception as e:
+        print(f"⚠️ Analysis error: {str(e)}")
+        traceback.print_exc()
         return {'error': f'角度計算エラー: {str(e)}', 'analysis_type': analysis_type}
 
 @app.route('/')
 def index():
+    """メインページ"""
     return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    """画像アップロード処理"""
+    print("=== アップロードリクエスト受信 ===")
+    
     if 'file' not in request.files:
+        print("'file'フィールドがありません")
         return jsonify({'error': 'ファイルが選択されていません'}), 400
     
     file = request.files['file']
     if file.filename == '':
+        print("ファイル名が空です")
         return jsonify({'error': 'ファイルが選択されていません'}), 400
     
     if file and allowed_file(file.filename):
@@ -192,17 +209,25 @@ def upload_file():
             
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
+            print(f"ファイル保存完了: {filepath}")
             
             # 画像の情報を取得
             with Image.open(filepath) as img:
                 width, height = img.size
             
+            print(f"画像サイズ: {width}x{height}px")
+            
+            # AIを使わずデフォルト関節点を設定（軽量処理モード）
+            # Renderで安定して動作させるために、MediaPipeを使わずデフォルト設定にする
+            use_ai = False  # 最初はAIなしで試す（安定性優先）
+            
             keypoints_data = {}
             ai_detection_used = False
             
-            if MEDIAPIPE_AVAILABLE and cv2 is not None:
-                # MediaPipeで姿勢推定
+            if use_ai and MEDIAPIPE_AVAILABLE and cv2 is not None:
+                # MediaPipeで姿勢推定（必要に応じて有効化）
                 try:
+                    print("AI姿勢推定を開始...")
                     image = cv2.imread(filepath)
                     if image is not None:
                         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -217,13 +242,14 @@ def upload_file():
                                     y = int(landmark.y * height)
                                     keypoints_data[frontend_name] = {'x': x, 'y': y}
                             ai_detection_used = True
-                            print("✅ AI pose detection successful")
+                            print("✅ AI姿勢推定成功")
                 except Exception as e:
-                    print(f"⚠️ AI pose detection failed: {e}")
+                    print(f"⚠️ AI姿勢推定エラー: {e}")
+                    traceback.print_exc()
             
             # MediaPipeが利用できない場合またはランドマークが検出されない場合のデフォルト
             if not keypoints_data:
-                print("🔧 Using default joint positions - manual adjustment available")
+                print("🔧 デフォルト関節点を使用 - 手動調整が必要です")
                 # デフォルトの関節点位置を画像サイズに合わせてスケール
                 scale_x = width / 400  # 基準サイズ400px
                 scale_y = height / 500  # 基準サイズ500px
@@ -234,7 +260,10 @@ def upload_file():
                         'y': int(default_pos['y'] * scale_y)
                     }
             
-            return jsonify({
+            # レスポンスを返す前に成功を記録
+            print("✅ アップロード処理が完了しました")
+            
+            response_data = {
                 'success': True,
                 'filename': filename,
                 'keypoints': keypoints_data,
@@ -244,28 +273,45 @@ def upload_file():
                 'ai_detection_used': ai_detection_used,
                 'detection_method': 'AI pose detection' if ai_detection_used else 'Default positions (manual adjustment recommended)',
                 'dependencies_available': DEPENDENCIES_AVAILABLE
-            })
+            }
+            
+            return jsonify(response_data)
             
         except Exception as e:
+            print(f"⚠️ 画像処理エラー: {str(e)}")
+            traceback.print_exc()
             return jsonify({'error': f'画像処理中にエラーが発生しました: {str(e)}'}), 500
     
+    print("⚠️ 無効なファイル形式です")
     return jsonify({'error': '無効なファイル形式です。JPG, PNG, WEBP形式をサポートしています。'}), 400
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
+    """姿勢分析処理"""
     try:
+        print("=== 分析リクエスト受信 ===")
         data = request.get_json()
         keypoints = data.get('keypoints', {})
         analysis_mode = data.get('analysis_mode', 'set')
         
+        print(f"分析モード: {analysis_mode}")
+        
+        if not keypoints:
+            print("⚠️ 関節点データがありません")
+            return jsonify({'error': '関節点データがありません'}), 400
+        
         result = analyze_crouch_angles(keypoints, analysis_mode)
+        print(f"✅ 分析完了: {result}")
         return jsonify({'success': True, **result})
         
     except Exception as e:
+        print(f"⚠️ 分析エラー: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': f'分析中にエラーが発生しました: {str(e)}'}), 500
 
 @app.route('/static/uploads/<filename>')
 def uploaded_file(filename):
+    """アップロードされた画像を配信"""
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/share/<analysis_id>')
@@ -274,6 +320,47 @@ def share_analysis(analysis_id):
     # 実際の実装では分析結果をデータベースに保存し、analysis_idで取得
     # ここではデモ用に基本ページを返す
     return render_template('index.html', shared_analysis_id=analysis_id)
+
+@app.route('/simple-upload')
+def simple_upload_form():
+    """簡易アップロードフォーム - テスト用"""
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>簡易アップローダー</title>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: sans-serif; margin: 20px; }
+            form { margin: 20px 0; }
+            iframe { border: 1px solid #ccc; }
+            .info { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+        </style>
+    </head>
+    <body>
+        <h1>簡易画像アップローダー（テスト用）</h1>
+        <p>このページは画像アップロード機能のテスト用です。</p>
+        
+        <div class="info">
+            <h3>システム情報</h3>
+            <ul>
+                <li>AI依存関係: {{ 'インストール済み' if dependencies_available else '利用不可' }}</li>
+                <li>MediaPipe: {{ '利用可能' if mediapipe_available else '利用不可' }}</li>
+            </ul>
+        </div>
+        
+        <form action="/upload" method="post" enctype="multipart/form-data" target="result">
+            <input type="file" name="file" accept="image/*"><br><br>
+            <button type="submit">アップロード</button>
+        </form>
+        
+        <h3>レスポンス:</h3>
+        <iframe name="result" style="width:100%;height:300px;"></iframe>
+        
+        <p><a href="/">メインアプリに戻る</a></p>
+    </body>
+    </html>
+    """, dependencies_available=DEPENDENCIES_AVAILABLE, mediapipe_available=MEDIAPIPE_AVAILABLE)
 
 @app.route('/api/test')
 def test_endpoint():
@@ -310,6 +397,8 @@ def test_endpoint():
         })
         
     except Exception as e:
+        print(f"⚠️ API test error: {str(e)}")
+        traceback.print_exc()
         return jsonify({
             'status': 'error',
             'message': f'Test failed: {str(e)}',
@@ -338,6 +427,86 @@ def health_check():
         status_info['message'] = 'All features available'
     
     return jsonify(status_info)
+
+@app.route('/debug')
+def debug_info():
+    """デバッグ情報を表示"""
+    debug_data = {
+        'python_version': sys.version,
+        'app_config': {
+            'upload_folder': app.config['UPLOAD_FOLDER'],
+            'max_content_length': app.config['MAX_CONTENT_LENGTH']
+        },
+        'upload_folder_exists': os.path.exists(app.config['UPLOAD_FOLDER']),
+        'upload_folder_writable': os.access(app.config['UPLOAD_FOLDER'], os.W_OK),
+        'environment': dict(os.environ),
+        'dependencies': {
+            'flask': True,
+            'pillow': True,
+            'opencv': DEPENDENCIES_AVAILABLE,
+            'mediapipe': MEDIAPIPE_AVAILABLE,
+            'numpy': DEPENDENCIES_AVAILABLE
+        }
+    }
+    
+    try:
+        debug_data['upload_folder_contents'] = os.listdir(app.config['UPLOAD_FOLDER'])
+    except:
+        debug_data['upload_folder_contents'] = 'Error listing directory'
+    
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>システムデバッグ情報</title>
+        <meta charset="UTF-8">
+        <style>
+            body { font-family: monospace; margin: 20px; }
+            h1 { color: #333; }
+            .section { margin: 20px 0; padding: 10px; background: #f5f5f5; border-radius: 5px; }
+            .key { font-weight: bold; color: #0066cc; }
+            pre { background: #eee; padding: 10px; border-radius: 5px; overflow-x: auto; }
+        </style>
+    </head>
+    <body>
+        <h1>システムデバッグ情報</h1>
+        
+        <div class="section">
+            <h2>Pythonバージョン</h2>
+            <pre>{{ debug_data.python_version }}</pre>
+        </div>
+        
+        <div class="section">
+            <h2>アプリ設定</h2>
+            <p><span class="key">アップロードフォルダ:</span> {{ debug_data.app_config.upload_folder }}</p>
+            <p><span class="key">フォルダ存在:</span> {{ debug_data.upload_folder_exists }}</p>
+            <p><span class="key">書き込み可能:</span> {{ debug_data.upload_folder_writable }}</p>
+            <p><span class="key">最大ファイルサイズ:</span> {{ debug_data.app_config.max_content_length // 1024 // 1024 }}MB</p>
+        </div>
+        
+        <div class="section">
+            <h2>アップロードフォルダの内容</h2>
+            <pre>{{ debug_data.upload_folder_contents }}</pre>
+        </div>
+        
+        <div class="section">
+            <h2>依存関係</h2>
+            <p><span class="key">Flask:</span> {{ debug_data.dependencies.flask }}</p>
+            <p><span class="key">Pillow:</span> {{ debug_data.dependencies.pillow }}</p>
+            <p><span class="key">OpenCV:</span> {{ debug_data.dependencies.opencv }}</p>
+            <p><span class="key">MediaPipe:</span> {{ debug_data.dependencies.mediapipe }}</p>
+            <p><span class="key">NumPy:</span> {{ debug_data.dependencies.numpy }}</p>
+        </div>
+        
+        <div class="section">
+            <h2>環境変数</h2>
+            <pre>{{ debug_data.environment }}</pre>
+        </div>
+        
+        <p><a href="/">メインアプリに戻る</a> | <a href="/api/health">ヘルスチェック</a> | <a href="/simple-upload">簡易アップローダー</a></p>
+    </body>
+    </html>
+    """, debug_data=debug_data)
 
 if __name__ == '__main__':
     import os
