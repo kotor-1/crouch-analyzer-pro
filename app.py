@@ -1,368 +1,343 @@
-from flask import Flask, request, render_template, jsonify, redirect, url_for, flash
-import os
-import uuid
-from datetime import datetime
-import mediapipe as mp
-import cv2
-import numpy as np
+from flask import Flask, render_template, request, jsonify, send_from_directory
+import math
 from PIL import Image
 import io
-import json
-import math
+import base64
+import os
+import sys
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'development-key')
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB制限
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # アップロードフォルダが存在しない場合は作成
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# MediaPipe Pose初期化
-mp_pose = mp.solutions.pose
+# 依存関係が失敗してもアプリが動作するように修正
+DEPENDENCIES_AVAILABLE = True
+try:
+    import cv2
+    import mediapipe as mp
+    import numpy as np
+    print("✅ All dependencies loaded successfully")
+    
+    # MediaPipe姿勢推定の初期化
+    mp_pose = mp.solutions.pose
+    mp_drawing = mp.solutions.drawing_utils
+    pose = mp_pose.Pose(static_image_mode=True, min_detection_confidence=0.5)
+    MEDIAPIPE_AVAILABLE = True
+    print("✅ MediaPipe initialized successfully")
+except ImportError as e:
+    DEPENDENCIES_AVAILABLE = False
+    MEDIAPIPE_AVAILABLE = False
+    print(f"⚠️ Dependencies not available: {e}")
+    print("🔧 Running in basic mode - manual joint point setting will be available")
+    # 基本機能のみで動作させる
+    cv2 = None
+    mp = None
+    pose = None
+    np = None
 
-# 許可されるファイル拡張子
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+# MediaPipe landmark indices to frontend joint mapping
+MEDIAPIPE_TO_FRONTEND = {
+    11: 'LShoulder',  # 左肩
+    12: 'RShoulder',  # 右肩
+    23: 'LHip',       # 左腰
+    24: 'RHip',       # 右腰
+    25: 'LKnee',      # 左膝
+    26: 'RKnee',      # 右膝
+    27: 'LAnkle',     # 左足首
+    28: 'RAnkle',     # 右足首
+    0: 'C7'           # 鼻（第7頸椎の代用）
+}
+
+# Default joint positions for when MediaPipe is not available
+DEFAULT_JOINTS = {
+    'LShoulder': {'x': 150, 'y': 100},
+    'RShoulder': {'x': 250, 'y': 100},
+    'LHip': {'x': 170, 'y': 200},
+    'RHip': {'x': 230, 'y': 200},
+    'LKnee': {'x': 180, 'y': 300},
+    'RKnee': {'x': 220, 'y': 300},
+    'LAnkle': {'x': 190, 'y': 400},
+    'RAnkle': {'x': 210, 'y': 400},
+    'C7': {'x': 200, 'y': 50}
+}
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+def calculate_angle(point1, point2, point3):
+    """3点から角度を計算する関数"""
+    try:
+        # ベクトルを計算
+        vector1 = [point1[0] - point2[0], point1[1] - point2[1]]
+        vector2 = [point3[0] - point2[0], point3[1] - point2[1]]
+        
+        # 内積を計算
+        if DEPENDENCIES_AVAILABLE and 'np' in globals():
+            # numpy利用可能な場合
+            vector1 = np.array(vector1)
+            vector2 = np.array(vector2)
+            dot_product = np.dot(vector1, vector2)
+            magnitude1 = np.linalg.norm(vector1)
+            magnitude2 = np.linalg.norm(vector2)
+        else:
+            # numpy無しの基本計算
+            dot_product = vector1[0] * vector2[0] + vector1[1] * vector2[1]
+            magnitude1 = math.sqrt(vector1[0]**2 + vector1[1]**2)
+            magnitude2 = math.sqrt(vector2[0]**2 + vector2[1]**2)
+        
+        # ゼロ除算を避ける
+        if magnitude1 == 0 or magnitude2 == 0:
+            return 0
+        
+        # cosθを計算
+        cos_theta = dot_product / (magnitude1 * magnitude2)
+        
+        # 数値誤差を修正（-1から1の範囲に制限）
+        cos_theta = max(-1.0, min(1.0, cos_theta))
+        
+        # 角度を計算（ラジアンから度に変換）
+        angle = math.degrees(math.acos(cos_theta))
+        
+        return round(angle, 1)
+    except Exception as e:
+        print(f"⚠️ Angle calculation error: {e}")
+        return 0
+
+def analyze_crouch_angles(keypoints, analysis_type="set"):
+    """クラウチングスタートの角度分析を行う"""
+    analysis_result = {}
+    
+    try:
+        if analysis_type == "set":
+            # セット姿勢の分析
+            # 前足の膝角度（左膝を前足と仮定）
+            if all(joint in keypoints for joint in ['LHip', 'LKnee', 'LAnkle']):
+                hip = keypoints['LHip']
+                knee = keypoints['LKnee']
+                ankle = keypoints['LAnkle']
+                front_angle = calculate_angle([hip['x'], hip['y']], [knee['x'], knee['y']], [ankle['x'], ankle['y']])
+                analysis_result['front_angle'] = front_angle
+            
+            # 後足の膝角度（右膝を後足と仮定）
+            if all(joint in keypoints for joint in ['RHip', 'RKnee', 'RAnkle']):
+                hip = keypoints['RHip']
+                knee = keypoints['RKnee']
+                ankle = keypoints['RAnkle']
+                rear_angle = calculate_angle([hip['x'], hip['y']], [knee['x'], knee['y']], [ankle['x'], ankle['y']])
+                analysis_result['rear_angle'] = rear_angle
+            
+            # 前足股関節角度
+            if all(joint in keypoints for joint in ['LShoulder', 'LHip', 'LKnee']):
+                shoulder = keypoints['LShoulder']
+                hip = keypoints['LHip']
+                knee = keypoints['LKnee']
+                front_hip_angle = calculate_angle([shoulder['x'], shoulder['y']], [hip['x'], hip['y']], [knee['x'], knee['y']])
+                analysis_result['front_hip_angle'] = front_hip_angle
+                
+        elif analysis_type == "takeoff":
+            # 飛び出し分析
+            # 下半身角度（腰-膝-足首）
+            if all(joint in keypoints for joint in ['LHip', 'LKnee', 'LAnkle']):
+                hip = keypoints['LHip']
+                knee = keypoints['LKnee']
+                ankle = keypoints['LAnkle']
+                lower_angle = calculate_angle([hip['x'], hip['y']], [knee['x'], knee['y']], [ankle['x'], ankle['y']])
+                analysis_result['lower_angle'] = lower_angle
+            
+            # 上半身角度（肩-腰-膝）
+            if all(joint in keypoints for joint in ['LShoulder', 'LHip', 'LKnee']):
+                shoulder = keypoints['LShoulder']
+                hip = keypoints['LHip']
+                knee = keypoints['LKnee']
+                upper_angle = calculate_angle([shoulder['x'], shoulder['y']], [hip['x'], hip['y']], [knee['x'], knee['y']])
+                analysis_result['upper_angle'] = upper_angle
+            
+            # くの字角度（肩-腰-足首）
+            if all(joint in keypoints for joint in ['LShoulder', 'LHip', 'LAnkle']):
+                shoulder = keypoints['LShoulder']
+                hip = keypoints['LHip']
+                ankle = keypoints['LAnkle']
+                kunoji_angle = calculate_angle([shoulder['x'], shoulder['y']], [hip['x'], hip['y']], [ankle['x'], ankle['y']])
+                analysis_result['kunoji_angle'] = kunoji_angle
+        
+        analysis_result['analysis_type'] = analysis_type
+        return analysis_result
+        
+    except Exception as e:
+        return {'error': f'角度計算エラー: {str(e)}', 'analysis_type': analysis_type}
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
-def upload_image():
+def upload_file():
     if 'file' not in request.files:
-        flash('ファイルがありません')
-        return redirect(request.url)
+        return jsonify({'error': 'ファイルが選択されていません'}), 400
     
     file = request.files['file']
-    
     if file.filename == '':
-        flash('ファイルが選択されていません')
-        return redirect(request.url)
+        return jsonify({'error': 'ファイルが選択されていません'}), 400
     
     if file and allowed_file(file.filename):
-        # ユニークなファイル名を生成
-        filename = str(uuid.uuid4()) + os.path.splitext(file.filename)[1]
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-        
-        return jsonify({
-            'success': True,
-            'message': 'アップロード成功',
-            'filename': filename,
-            'filepath': '/' + filepath
-        })
-    else:
-        return jsonify({
-            'success': False,
-            'message': '許可されていないファイル形式です。PNG、JPG、WEBPのみ対応しています。'
-        }), 400
-
-@app.route('/detect_joints', methods=['POST'])
-def detect_joints():
-    if 'image' not in request.files:
-        return jsonify({'error': 'No image provided'}), 400
+        try:
+            # ファイルを保存
+            filename = secure_filename(file.filename)
+            if not filename:
+                filename = 'uploaded_image.jpg'
+            
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            # 画像の情報を取得
+            with Image.open(filepath) as img:
+                width, height = img.size
+            
+            keypoints_data = {}
+            ai_detection_used = False
+            
+            if MEDIAPIPE_AVAILABLE and cv2 is not None:
+                # MediaPipeで姿勢推定
+                try:
+                    image = cv2.imread(filepath)
+                    if image is not None:
+                        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                        results = pose.process(image_rgb)
+                        
+                        if results.pose_landmarks:
+                            # MediaPipeの関節点をフロントエンド形式に変換
+                            for mp_idx, frontend_name in MEDIAPIPE_TO_FRONTEND.items():
+                                if mp_idx < len(results.pose_landmarks.landmark):
+                                    landmark = results.pose_landmarks.landmark[mp_idx]
+                                    x = int(landmark.x * width)
+                                    y = int(landmark.y * height)
+                                    keypoints_data[frontend_name] = {'x': x, 'y': y}
+                            ai_detection_used = True
+                            print("✅ AI pose detection successful")
+                except Exception as e:
+                    print(f"⚠️ AI pose detection failed: {e}")
+            
+            # MediaPipeが利用できない場合またはランドマークが検出されない場合のデフォルト
+            if not keypoints_data:
+                print("🔧 Using default joint positions - manual adjustment available")
+                # デフォルトの関節点位置を画像サイズに合わせてスケール
+                scale_x = width / 400  # 基準サイズ400px
+                scale_y = height / 500  # 基準サイズ500px
+                
+                for joint_name, default_pos in DEFAULT_JOINTS.items():
+                    keypoints_data[joint_name] = {
+                        'x': int(default_pos['x'] * scale_x),
+                        'y': int(default_pos['y'] * scale_y)
+                    }
+            
+            return jsonify({
+                'success': True,
+                'filename': filename,
+                'keypoints': keypoints_data,
+                'image_url': f'/static/uploads/{filename}',
+                'image_width': width,
+                'image_height': height,
+                'ai_detection_used': ai_detection_used,
+                'detection_method': 'AI pose detection' if ai_detection_used else 'Default positions (manual adjustment recommended)',
+                'dependencies_available': DEPENDENCIES_AVAILABLE
+            })
+            
+        except Exception as e:
+            return jsonify({'error': f'画像処理中にエラーが発生しました: {str(e)}'}), 500
     
-    file = request.files['image']
-    img_bytes = file.read()
-    
-    # PILでの画像読み込み
-    image = Image.open(io.BytesIO(img_bytes))
-    image_np = np.array(image)
-    
-    # MediaPipe Pose検出の設定
-    with mp_pose.Pose(
-        static_image_mode=True, 
-        model_complexity=2,
-        min_detection_confidence=0.5
-    ) as pose:
-        # RGB形式に変換（MediaPipeの要件）
-        # 注意: cv2はBGRで扱うが、PILからのnumpyアレイはRGBのため変換不要
-        
-        # ポーズ検出
-        results = pose.process(image_np)
-        
-        if not results.pose_landmarks:
-            return jsonify({'error': 'No pose detected'}), 400
-        
-        # 関節点の取得
-        landmarks = results.pose_landmarks.landmark
-        
-        # クラウチングスタート姿勢に必要な関節点を抽出
-        joint_points = {
-            # 関節点のマッピング
-            '1': {'x': landmarks[mp_pose.PoseLandmark.NOSE.value].x, 
-                'y': landmarks[mp_pose.PoseLandmark.NOSE.value].y},
-            '2': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, 
-                'y': landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y},
-            '3': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, 
-                'y': landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y},
-            '4': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, 
-                'y': landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y},
-            '5': {'x': landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, 
-                'y': landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y},
-            '6': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, 
-                'y': landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y},
-            '7': {'x': landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, 
-                'y': landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y},
-            '8': {'x': landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x, 
-                'y': landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y},
-            '9': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x, 
-                'y': landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y},
-            # C7（第7頸椎）の位置を計算
-            '10': {'x': (landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x + 
-                        landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x) / 2,
-                  'y': (landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y + 
-                        landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y) / 2}
-        }
-        
-        return jsonify({'success': True, 'joints': joint_points})
+    return jsonify({'error': '無効なファイル形式です。JPG, PNG, WEBP形式をサポートしています。'}), 400
 
 @app.route('/analyze', methods=['POST'])
-def analyze_posture():
-    data = request.json
-    joints = data.get('joints', {})
-    mode = data.get('mode', 'set')  # 'set'または'start'
-    
-    if not joints:
-        return jsonify({'error': '関節データがありません'}), 400
-    
-    # モードに応じた分析
-    if mode == 'set':
-        analysis_result = analyze_set_posture(joints)
-    else:  # 'start'
-        analysis_result = analyze_start_posture(joints)
-    
-    return jsonify({
-        'success': True,
-        'analysis': analysis_result
-    })
+def analyze():
+    try:
+        data = request.get_json()
+        keypoints = data.get('keypoints', {})
+        analysis_mode = data.get('analysis_mode', 'set')
+        
+        result = analyze_crouch_angles(keypoints, analysis_mode)
+        return jsonify({'success': True, **result})
+        
+    except Exception as e:
+        return jsonify({'error': f'分析中にエラーが発生しました: {str(e)}'}), 500
 
-def analyze_set_posture(joints):
-    """セット姿勢の分析"""
-    # 前足・後足の判定（膝の左右位置で判断）
-    if float(joints['4']['x']) < float(joints['5']['x']):  # 右膝が左側
-        front_points = ('3', '4', '6')  # 右腰-右膝-右足首
-        rear_points = ('3', '5', '7')   # 右腰-左膝-左足首
-        front_hip_points = ('3', '4')   # 右腰-右膝
-    else:
-        front_points = ('3', '5', '7')  # 右腰-左膝-左足首
-        rear_points = ('3', '4', '6')   # 右腰-右膝-右足首
-        front_hip_points = ('3', '5')   # 右腰-左膝
-    
-    # 角度計算
-    front_angle = calculate_angle(
-        (float(joints[front_points[0]]['x']), float(joints[front_points[0]]['y'])),
-        (float(joints[front_points[1]]['x']), float(joints[front_points[1]]['y'])),
-        (float(joints[front_points[2]]['x']), float(joints[front_points[2]]['y']))
-    )
-    
-    rear_angle = calculate_angle(
-        (float(joints[rear_points[0]]['x']), float(joints[rear_points[0]]['y'])),
-        (float(joints[rear_points[1]]['x']), float(joints[rear_points[1]]['y'])),
-        (float(joints[rear_points[2]]['x']), float(joints[rear_points[2]]['y']))
-    )
-    
-    # 股関節角度の計算
-    hip_angle = calculate_hip_ground_angle(
-        (float(joints[front_hip_points[0]]['x']), float(joints[front_hip_points[0]]['y'])),
-        (float(joints[front_hip_points[1]]['x']), float(joints[front_hip_points[1]]['y']))
-    )
-    
-    angles = {
-        'front_angle': round(front_angle, 1),
-        'rear_angle': round(rear_angle, 1),
-        'hip_angle': round(hip_angle, 1)
-    }
-    
-    # スコア計算
-    score = calculate_set_score(front_angle, rear_angle, hip_angle)
-    
-    # フィードバック生成
-    feedback = generate_set_feedback(front_angle, rear_angle, hip_angle)
-    
-    return {
-        'score': score,
-        'angles': angles,
-        'feedback': feedback
-    }
+@app.route('/static/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-def analyze_start_posture(joints):
-    """飛び出し姿勢の分析"""
-    # 前足の判定（足首の左右位置で判断）
-    if float(joints['6']['x']) > float(joints['7']['x']):  # 右足首が右側
-        hip = (float(joints['3']['x']), float(joints['3']['y']))  # 右腰
-        ankle = (float(joints['6']['x']), float(joints['6']['y']))  # 右足首
-    else:
-        hip = (float(joints['3']['x']), float(joints['3']['y']))  # 右腰
-        ankle = (float(joints['7']['x']), float(joints['7']['y']))  # 左足首
-    
-    c7 = (float(joints['10']['x']), float(joints['10']['y']))  # C7（第7頸椎）
-    
-    # 角度計算
-    lower_angle = calculate_vector_angle_with_ground(hip, ankle)
-    upper_angle = calculate_vector_angle_with_ground(c7, hip)
-    kunoji_angle = calculate_angle(c7, hip, ankle)
-    
-    angles = {
-        'lower_angle': round(lower_angle, 1),
-        'upper_angle': round(upper_angle, 1),
-        'kunoji_angle': round(kunoji_angle, 1)
-    }
-    
-    # スコア計算
-    score = calculate_start_score(lower_angle, upper_angle, kunoji_angle)
-    
-    # フィードバック生成
-    feedback = generate_start_feedback(lower_angle, upper_angle, kunoji_angle)
-    
-    return {
-        'score': score,
-        'angles': angles,
-        'feedback': feedback
-    }
+@app.route('/share/<analysis_id>')
+def share_analysis(analysis_id):
+    """チーム共有用のURL"""
+    # 実際の実装では分析結果をデータベースに保存し、analysis_idで取得
+    # ここではデモ用に基本ページを返す
+    return render_template('index.html', shared_analysis_id=analysis_id)
 
-def calculate_angle(p1, p2, p3):
-    """3点間の角度を計算"""
-    a = np.array([p1[0], p1[1]])
-    b = np.array([p2[0], p2[1]])
-    c = np.array([p3[0], p3[1]])
-    
-    ba = a - b
-    bc = c - b
-    
-    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
-    cosine_angle = np.clip(cosine_angle, -1.0, 1.0)  # 数値誤差対策
-    angle = np.arccos(cosine_angle)
-    
-    return np.degrees(angle)
+@app.route('/api/test')
+def test_endpoint():
+    """テスト用エンドポイント - 基本機能の動作確認"""
+    try:
+        # Test basic functionality
+        test_keypoints = {
+            'LShoulder': {'x': 150, 'y': 100},
+            'LHip': {'x': 170, 'y': 200},
+            'LKnee': {'x': 180, 'y': 300},
+            'LAnkle': {'x': 190, 'y': 400}
+        }
+        
+        # Test angle calculation
+        test_angle = calculate_angle([150, 100], [170, 200], [180, 300])
+        
+        # Test analysis
+        analysis_result = analyze_crouch_angles(test_keypoints, "set")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Basic functionality test passed',
+            'dependencies_available': DEPENDENCIES_AVAILABLE,
+            'mediapipe_available': MEDIAPIPE_AVAILABLE,
+            'test_results': {
+                'angle_calculation': test_angle,
+                'analysis_function': analysis_result,
+                'default_joints_available': len(DEFAULT_JOINTS) > 0
+            },
+            'deployment_info': {
+                'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+                'app_mode': 'AI-enabled' if DEPENDENCIES_AVAILABLE else 'Basic mode'
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Test failed: {str(e)}',
+            'dependencies_available': DEPENDENCIES_AVAILABLE,
+            'mediapipe_available': MEDIAPIPE_AVAILABLE
+        }), 500
 
-def calculate_hip_ground_angle(hip_pos, knee_pos):
-    """股関節と地面の角度を計算"""
-    dx = knee_pos[0] - hip_pos[0]
-    dy = knee_pos[1] - hip_pos[1]
-    
-    angle_rad = math.atan2(dy, dx)
-    angle_deg = math.degrees(angle_rad)
-    
-    if angle_deg < 0:
-        angle_deg = abs(angle_deg)
-    elif angle_deg > 90:
-        angle_deg = 180 - angle_deg
-    
-    return angle_deg
-
-def calculate_vector_angle_with_ground(p1, p2):
-    """ベクトルと地面の角度を計算"""
-    dx = p2[0] - p1[0]
-    dy = p2[1] - p1[1]
-    
-    v = np.array([dx, dy])
-    ground = np.array([1, 0])
-    
-    v_norm = np.linalg.norm(v)
-    cosine = np.dot(v, ground) / v_norm
-    cosine = np.clip(cosine, -1.0, 1.0)  # 数値誤差対策
-    angle = np.degrees(np.arccos(cosine))
-    
-    return angle
-
-def calculate_set_score(front_angle, rear_angle, hip_angle):
-    """セット姿勢のスコアを計算"""
-    # 理想的な角度
-    ideal_front = 90
-    ideal_rear = 125
-    ideal_hip = 50
-    
-    # 差分を計算
-    front_diff = abs(front_angle - ideal_front)
-    rear_diff = abs(rear_angle - ideal_rear)
-    hip_diff = abs(hip_angle - ideal_hip)
-    
-    # 重み付け
-    total_diff = (front_diff * 0.4) + (rear_diff * 0.3) + (hip_diff * 0.3)
-    
-    # スコア計算（100点満点）
-    max_diff = 50  # 最大許容差
-    score = max(0, 100 - (total_diff * 100 / max_diff))
-    
-    return round(score, 1)
-
-def calculate_start_score(lower_angle, upper_angle, kunoji_angle):
-    """飛び出し姿勢のスコアを計算"""
-    # 理想的な角度
-    ideal_lower = 45
-    ideal_upper = 40
-    ideal_kunoji = 160
-    
-    # 差分を計算
-    lower_diff = abs(lower_angle - ideal_lower)
-    upper_diff = abs(upper_angle - ideal_upper)
-    kunoji_diff = abs(kunoji_angle - ideal_kunoji)
-    
-    # 重み付け
-    total_diff = (lower_diff * 0.3) + (upper_diff * 0.3) + (kunoji_diff * 0.4)
-    
-    # スコア計算（100点満点）
-    max_diff = 50  # 最大許容差
-    score = max(0, 100 - (total_diff * 100 / max_diff))
-    
-    return round(score, 1)
-
-def generate_set_feedback(front_angle, rear_angle, hip_angle):
-    """セット姿勢のフィードバックを生成"""
-    feedback = []
-    
-    # 前足の膝角度
-    if abs(front_angle - 90) > 10:
-        feedback.append(f"前足の膝角度 {front_angle:.1f}° → 90°に近づけましょう。")
-    else:
-        feedback.append(f"前足の膝角度 {front_angle:.1f}° → 理想的です！")
-    
-    # 後足の膝角度
-    if rear_angle < 120 or rear_angle > 135:
-        feedback.append(f"後足の膝角度 {rear_angle:.1f}° → 適正範囲(120-135°)を意識しましょう。")
-    else:
-        feedback.append(f"後足の膝角度 {rear_angle:.1f}° → 理想的です！")
-    
-    # 股関節角度
-    if hip_angle < 40 or hip_angle > 60:
-        feedback.append(f"前足股関節角度 {hip_angle:.1f}° → 適正範囲(40-60°)を意識しましょう。")
-    else:
-        feedback.append(f"前足股関節角度 {hip_angle:.1f}° → 理想的です！")
-    
-    return feedback
-
-def generate_start_feedback(lower_angle, upper_angle, kunoji_angle):
-    """飛び出し姿勢のフィードバックを生成"""
-    feedback = []
-    
-    # 下半身角度
-    if lower_angle < 30 or lower_angle > 60:
-        feedback.append(f"下半身角度 {lower_angle:.1f}° → 30-60°が目安です。")
-    else:
-        feedback.append(f"下半身角度 {lower_angle:.1f}° → 理想的です！")
-    
-    # 上半身角度
-    if upper_angle < 25 or upper_angle > 55:
-        feedback.append(f"上半身角度 {upper_angle:.1f}° → 25-55°が目安です。")
-    else:
-        feedback.append(f"上半身角度 {upper_angle:.1f}° → 理想的です！")
-    
-    # くの字角度
-    if kunoji_angle < 150:
-        feedback.append(f"くの字角度 {kunoji_angle:.1f}° → 150°以上が目安です。")
-    else:
-        feedback.append(f"くの字角度 {kunoji_angle:.1f}° → 理想的です！")
-    
-    return feedback
-
-@app.route('/healthz')
+@app.route('/api/health')
 def health_check():
-    return jsonify({"status": "ok"}), 200
+    """ヘルスチェック用エンドポイント"""
+    status_info = {
+        'status': 'healthy',
+        'dependencies_available': DEPENDENCIES_AVAILABLE,
+        'mediapipe_available': MEDIAPIPE_AVAILABLE,
+        'version': '1.0.0',
+        'features': {
+            'manual_joint_setting': True,  # 常に利用可能
+            'ai_pose_detection': MEDIAPIPE_AVAILABLE,
+            'angle_analysis': True  # numpy非依存の基本計算は常に利用可能
+        }
+    }
+    
+    if not DEPENDENCIES_AVAILABLE:
+        status_info['message'] = 'Running in basic mode - AI features disabled'
+    else:
+        status_info['message'] = 'All features available'
+    
+    return jsonify(status_info)
 
 if __name__ == '__main__':
     import os
