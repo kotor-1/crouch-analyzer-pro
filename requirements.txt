@@ -1,4 +1,4 @@
 Flask==3.0.0
 gunicorn==21.2.0
---find-links https://download.pytorch.org/whl/torch_stable.html
-Pillow==10.3.0
+--only-binary=Pillow
+Pillow==9.5.0
