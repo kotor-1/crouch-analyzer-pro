@@ -16,6 +16,33 @@ body {
     border-radius: 10px 10px 0 0 !important;
 }
 
+/* ドラッグ&ドロップエリア */
+.drop-area {
+    border: 2px dashed #667eea;
+    border-radius: 10px;
+    padding: 40px;
+    text-align: center;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.drop-area:hover {
+    border-color: #5a6fd8;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+    transform: translateY(-2px);
+}
+
+.drop-area.dragover {
+    border-color: #28a745;
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.1), rgba(32, 201, 151, 0.1));
+    transform: scale(1.02);
+}
+
+.drop-content {
+    pointer-events: none;
+}
+
 #imageCanvas {
     max-width: 100%;
     height: auto;
