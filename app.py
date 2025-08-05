@@ -1,10 +1,10 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
-import numpy as np
 import math
 from PIL import Image
 import io
 import base64
 import os
+import sys
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -37,6 +37,7 @@ except ImportError as e:
     cv2 = None
     mp = None
     pose = None
+    np = None
 
 # MediaPipe landmark indices to frontend joint mapping
 MEDIAPIPE_TO_FRONTEND = {
@@ -273,6 +274,48 @@ def share_analysis(analysis_id):
     # 実際の実装では分析結果をデータベースに保存し、analysis_idで取得
     # ここではデモ用に基本ページを返す
     return render_template('index.html', shared_analysis_id=analysis_id)
+
+@app.route('/api/test')
+def test_endpoint():
+    """テスト用エンドポイント - 基本機能の動作確認"""
+    try:
+        # Test basic functionality
+        test_keypoints = {
+            'LShoulder': {'x': 150, 'y': 100},
+            'LHip': {'x': 170, 'y': 200},
+            'LKnee': {'x': 180, 'y': 300},
+            'LAnkle': {'x': 190, 'y': 400}
+        }
+        
+        # Test angle calculation
+        test_angle = calculate_angle([150, 100], [170, 200], [180, 300])
+        
+        # Test analysis
+        analysis_result = analyze_crouch_angles(test_keypoints, "set")
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Basic functionality test passed',
+            'dependencies_available': DEPENDENCIES_AVAILABLE,
+            'mediapipe_available': MEDIAPIPE_AVAILABLE,
+            'test_results': {
+                'angle_calculation': test_angle,
+                'analysis_function': analysis_result,
+                'default_joints_available': len(DEFAULT_JOINTS) > 0
+            },
+            'deployment_info': {
+                'python_version': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+                'app_mode': 'AI-enabled' if DEPENDENCIES_AVAILABLE else 'Basic mode'
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Test failed: {str(e)}',
+            'dependencies_available': DEPENDENCIES_AVAILABLE,
+            'mediapipe_available': MEDIAPIPE_AVAILABLE
+        }), 500
 
 @app.route('/api/health')
 def health_check():
