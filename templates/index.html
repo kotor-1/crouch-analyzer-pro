@@ -1,137 +1,52 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>クラウチスタンス分析ツール</title>
     <style>
-        body {
-            font-family: 'Arial', sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-        }
-        .container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        .upload-container {
-            margin: 20px 0;
-            text-align: center;
-        }
-        .image-container {
-            position: relative;
-            margin: 20px 0;
-            max-width: 100%;
-        }
-        #preview-image {
-            max-width: 100%;
-            display: none;
-        }
-        .joint-point {
-            position: absolute;
-            width: 10px;
-            height: 10px;
-            background-color: red;
-            border-radius: 50%;
+        body { font-family: Arial; margin: 0 auto; max-width: 800px; padding: 20px; }
+        h1 { text-align: center; }
+        .container { display: flex; flex-direction: column; align-items: center; }
+        .image-container { margin: 20px 0; position: relative; }
+        #preview-image { max-width: 100%; display: none; }
+        .joint-point { 
+            position: absolute; width: 10px; height: 10px; 
+            background: red; border-radius: 50%; 
             transform: translate(-50%, -50%);
-            cursor: move;
         }
-        .analysis-container {
-            margin: 20px 0;
-            padding: 15px;
-            background-color: #f9f9f9;
-            border-radius: 5px;
-            display: none;
+        .analysis-container { 
+            display: none; margin: 20px 0; padding: 15px;
+            background: #f5f5f5; border-radius: 5px;
         }
-        .score-container {
-            text-align: center;
-            font-size: 1.2em;
-            margin-bottom: 15px;
+        button { 
+            background: #4CAF50; color: white; 
+            border: none; padding: 10px 15px; 
+            border-radius: 4px; cursor: pointer; 
         }
-        .score {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #4CAF50;
-        }
-        .feedback-container {
-            margin-top: 15px;
-        }
-        .feedback-item {
-            margin: 5px 0;
-            padding: 5px;
-            background-color: #e9e9e9;
-            border-radius: 3px;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 16px;
-            margin: 4px 2px;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        .loading {
-            display: none;
-            text-align: center;
-            margin: 10px 0;
-        }
-        .error-message {
-            color: red;
-            text-align: center;
-            display: none;
-            margin: 10px 0;
-        }
+        button:disabled { background: #ccc; }
     </style>
 </head>
 <body>
     <h1>クラウチスタンス分析ツール</h1>
     
     <div class="container">
-        <div class="upload-container">
+        <div>
             <input type="file" id="image-upload" accept="image/*">
             <button id="analyze-btn" disabled>姿勢を分析</button>
         </div>
         
-        <div class="loading" id="loading">
-            分析中...
-        </div>
-        
-        <div class="error-message" id="error-message"></div>
+        <div id="loading" style="display:none;">分析中...</div>
+        <div id="error-message" style="color:red;"></div>
         
         <div class="image-container" id="image-container">
             <img id="preview-image" alt="プレビュー">
-            <!-- 関節点はJSで動的に追加 -->
         </div>
         
         <div class="analysis-container" id="analysis-container">
-            <div class="score-container">
-                スコア: <span class="score" id="score">0</span>/100
-            </div>
-            <div class="angles-container" id="angles-container">
-                <!-- 角度情報はJSで動的に追加 -->
-            </div>
-            <div class="feedback-container" id="feedback-container">
-                <!-- フィードバックはJSで動的に追加 -->
-            </div>
+            <div>スコア: <span id="score">0</span>/100</div>
+            <div id="angles-container"></div>
+            <div id="feedback-container"></div>
         </div>
     </div>
 
@@ -149,49 +64,25 @@
             const feedbackContainer = document.getElementById('feedback-container');
             
             let jointPoints = {};
-            let imageFile = null;
             
-            // 関節点の名前マッピング
-            const jointNames = {
-                '1': '頭',
-                '2': '肩',
-                '3': '腰',
-                '4': '右膝',
-                '5': '左膝',
-                '6': '右足首',
-                '7': '左足首',
-                '8': '右手首',
-                '9': '左手首'
-            };
-            
-            // 画像アップロード処理
             imageUpload.addEventListener('change', function(e) {
-                imageFile = e.target.files[0];
-                if (!imageFile) return;
+                const file = e.target.files[0];
+                if (!file) return;
                 
-                // 画像をプレビュー表示
                 const reader = new FileReader();
                 reader.onload = function(event) {
                     previewImage.src = event.target.result;
                     previewImage.style.display = 'block';
                     
-                    // 既存の関節点をクリア
-                    clearJointPoints();
-                    
-                    // 関節点を検出
-                    detectJoints(imageFile);
+                    // 関節点検出
+                    detectJoints(file);
                 };
-                reader.readAsDataURL(imageFile);
-                
-                // 分析ボタンを有効化
-                analyzeBtn.disabled = false;
+                reader.readAsDataURL(file);
             });
             
-            // 関節点の検出
             function detectJoints(file) {
-                // ローディング表示
                 loadingElement.style.display = 'block';
-                errorMessage.style.display = 'none';
+                errorMessage.textContent = '';
                 
                 const formData = new FormData();
                 formData.append('image', file);
@@ -202,181 +93,72 @@
                 })
                 .then(response => response.json())
                 .then(data => {
+                    loadingElement.style.display = 'none';
                     if (data.success) {
                         jointPoints = data.joints;
                         renderJointPoints();
+                        analyzeBtn.disabled = false;
                     } else {
-                        showError(data.error || '関節検出に失敗しました。別の画像を試してください。');
+                        errorMessage.textContent = data.error || '関節検出に失敗しました';
                     }
-                    loadingElement.style.display = 'none';
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    showError('エラーが発生しました。もう一度試してください。');
                     loadingElement.style.display = 'none';
+                    errorMessage.textContent = 'エラーが発生しました: ' + error;
+                    console.error(error);
                 });
             }
             
-            // 関節点の描画
             function renderJointPoints() {
                 // 既存の関節点をクリア
-                clearJointPoints();
+                document.querySelectorAll('.joint-point').forEach(el => el.remove());
                 
-                // 画像の実際のサイズを取得
                 const imgWidth = previewImage.clientWidth;
                 const imgHeight = previewImage.clientHeight;
                 
-                // 各関節点を作成
                 for (const key in jointPoints) {
                     const joint = jointPoints[key];
-                    const jointElement = document.createElement('div');
-                    jointElement.className = 'joint-point';
-                    jointElement.id = `joint-${key}`;
-                    jointElement.setAttribute('data-joint-id', key);
-                    jointElement.setAttribute('title', jointNames[key] || `関節 ${key}`);
+                    const element = document.createElement('div');
+                    element.className = 'joint-point';
+                    element.style.left = (joint.x * imgWidth) + 'px';
+                    element.style.top = (joint.y * imgHeight) + 'px';
                     
-                    // 正規化された座標を実際の位置に変換
-                    const x = joint.x * imgWidth;
-                    const y = joint.y * imgHeight;
-                    
-                    jointElement.style.left = `${x}px`;
-                    jointElement.style.top = `${y}px`;
-                    
-                    // ドラッグ機能を追加
-                    makeJointDraggable(jointElement);
-                    
-                    imageContainer.appendChild(jointElement);
+                    imageContainer.appendChild(element);
                 }
             }
             
-            // 関節点のドラッグ機能
-            function makeJointDraggable(element) {
-                let isDragging = false;
-                let offsetX, offsetY;
-                
-                element.addEventListener('mousedown', startDrag);
-                element.addEventListener('touchstart', startDrag, { passive: false });
-                
-                function startDrag(e) {
-                    e.preventDefault();
-                    isDragging = true;
-                    
-                    if (e.type === 'mousedown') {
-                        offsetX = e.clientX - element.getBoundingClientRect().left;
-                        offsetY = e.clientY - element.getBoundingClientRect().top;
-                    } else {
-                        offsetX = e.touches[0].clientX - element.getBoundingClientRect().left;
-                        offsetY = e.touches[0].clientY - element.getBoundingClientRect().top;
-                    }
-                    
-                    document.addEventListener('mousemove', dragMove);
-                    document.addEventListener('touchmove', dragMove, { passive: false });
-                    document.addEventListener('mouseup', stopDrag);
-                    document.addEventListener('touchend', stopDrag);
-                }
-                
-                function dragMove(e) {
-                    if (!isDragging) return;
-                    e.preventDefault();
-                    
-                    let clientX, clientY;
-                    if (e.type === 'mousemove') {
-                        clientX = e.clientX;
-                        clientY = e.clientY;
-                    } else {
-                        clientX = e.touches[0].clientX;
-                        clientY = e.touches[0].clientY;
-                    }
-                    
-                    const containerRect = imageContainer.getBoundingClientRect();
-                    const imgRect = previewImage.getBoundingClientRect();
-                    
-                    // 画像内での位置を計算
-                    let x = clientX - containerRect.left - offsetX;
-                    let y = clientY - containerRect.top - offsetY;
-                    
-                    // 画像の範囲内に制限
-                    x = Math.max(0, Math.min(x, imgRect.width));
-                    y = Math.max(0, Math.min(y, imgRect.height));
-                    
-                    // 要素の位置を更新
-                    element.style.left = `${x}px`;
-                    element.style.top = `${y}px`;
-                    
-                    // 関節点データを更新
-                    const jointId = element.getAttribute('data-joint-id');
-                    jointPoints[jointId] = {
-                        x: x / imgRect.width,
-                        y: y / imgRect.height
-                    };
-                }
-                
-                function stopDrag() {
-                    isDragging = false;
-                    document.removeEventListener('mousemove', dragMove);
-                    document.removeEventListener('touchmove', dragMove);
-                    document.removeEventListener('mouseup', stopDrag);
-                    document.removeEventListener('touchend', stopDrag);
-                }
-            }
-            
-            // 関節点のクリア
-            function clearJointPoints() {
-                const joints = imageContainer.querySelectorAll('.joint-point');
-                joints.forEach(joint => joint.remove());
-            }
-            
-            // エラー表示
-            function showError(message) {
-                errorMessage.textContent = message;
-                errorMessage.style.display = 'block';
-            }
-            
-            // 姿勢分析
             analyzeBtn.addEventListener('click', function() {
-                if (Object.keys(jointPoints).length === 0) {
-                    showError('関節点が検出されていません。別の画像を試してください。');
-                    return;
-                }
-                
                 loadingElement.style.display = 'block';
-                errorMessage.style.display = 'none';
+                errorMessage.textContent = '';
                 
                 fetch('/analyze', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ joints: jointPoints })
                 })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.success) {
-                        displayAnalysisResults(data.analysis);
-                    } else {
-                        showError(data.error || '分析に失敗しました。もう一度試してください。');
-                    }
                     loadingElement.style.display = 'none';
+                    if (data.success) {
+                        displayResults(data.analysis);
+                    } else {
+                        errorMessage.textContent = data.error || '分析に失敗しました';
+                    }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    showError('エラーが発生しました。もう一度試してください。');
                     loadingElement.style.display = 'none';
+                    errorMessage.textContent = 'エラーが発生しました: ' + error;
+                    console.error(error);
                 });
             });
             
-            // 分析結果の表示
-            function displayAnalysisResults(analysis) {
-                // スコアを表示
+            function displayResults(analysis) {
                 scoreElement.textContent = analysis.score;
                 
-                // 角度情報を表示
                 anglesContainer.innerHTML = '';
                 for (const [key, value] of Object.entries(analysis.angles)) {
                     const angleElement = document.createElement('div');
                     let angleName = key;
-                    
-                    // 角度名を日本語に変換
                     if (key === 'back_angle') angleName = '背中の角度';
                     else if (key === 'knee_angle') angleName = '膝の角度';
                     else if (key === 'ankle_angle') angleName = '足首の角度';
@@ -385,16 +167,16 @@
                     anglesContainer.appendChild(angleElement);
                 }
                 
-                // フィードバックを表示
                 feedbackContainer.innerHTML = '';
                 analysis.feedback.forEach(feedback => {
-                    const feedbackElement = document.createElement('div');
-                    feedbackElement.className = 'feedback-item';
-                    feedbackElement.textContent = feedback;
-                    feedbackContainer.appendChild(feedbackElement);
+                    const element = document.createElement('div');
+                    element.style.margin = '5px 0';
+                    element.style.padding = '5px';
+                    element.style.background = '#e9e9e9';
+                    element.textContent = feedback;
+                    feedbackContainer.appendChild(element);
                 });
                 
-                // 分析結果を表示
                 analysisContainer.style.display = 'block';
             }
         });
