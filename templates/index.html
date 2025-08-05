@@ -3,10 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>クラウチングスタンス分析プロ</title>
+    <title>🏃 クラウチングスタンス分析プロ</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
         .dropzone {
             border: 2px dashed #ccc;
             border-radius: 8px;
@@ -91,6 +95,12 @@
             align-items: center;
             justify-content: center;
         }
+        footer {
+            margin-top: 40px;
+            padding: 20px 0;
+            background-color: #f8f9fa;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -103,10 +113,14 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#helpModal">使い方</a>
+                        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#helpModal">
+                            <i class="bi bi-question-circle"></i> 使い方
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#" id="share-btn">共有</a>
+                        <a class="nav-link" href="#" id="share-btn">
+                            <i class="bi bi-share"></i> 共有
+                        </a>
                     </li>
                 </ul>
             </div>
@@ -119,7 +133,7 @@
                 <!-- 画像アップロードエリア -->
                 <div class="card mb-4">
                     <div class="card-header bg-light">
-                        <h5 class="mb-0">画像アップロード</h5>
+                        <h5 class="mb-0">🖼️ 画像アップロード</h5>
                     </div>
                     <div class="card-body">
                         <div class="dropzone" id="upload-dropzone">
@@ -127,14 +141,14 @@
                             <p>または</p>
                             <input type="file" id="image-upload" class="d-none" accept="image/*">
                             <button class="btn btn-primary" onclick="document.getElementById('image-upload').click()">
-                                画像を選択
+                                <i class="bi bi-upload"></i> 画像を選択
                             </button>
                         </div>
                         <div class="mt-2 text-center" id="loading" style="display:none;">
                             <div class="spinner-border text-primary" role="status">
                                 <span class="visually-hidden">Loading...</span>
                             </div>
-                            <p>AI分析中...</p>
+                            <p>🤖 AI分析中...</p>
                         </div>
                         <div class="alert alert-danger mt-3" id="error-message" style="display:none;"></div>
                     </div>
@@ -143,7 +157,7 @@
                 <!-- 画像プレビューと関節点編集エリア -->
                 <div class="card">
                     <div class="card-header bg-light">
-                        <h5 class="mb-0">姿勢分析</h5>
+                        <h5 class="mb-0">📐 姿勢分析</h5>
                     </div>
                     <div class="card-body">
                         <div class="image-container" id="image-container">
@@ -153,19 +167,19 @@
 
                         <!-- 関節点編集モード選択 -->
                         <div class="control-panel mt-3">
-                            <h6>関節点調整モード:</h6>
+                            <h6>🔢 関節点調整モード:</h6>
                             <div class="mode-selector btn-group" role="group">
                                 <button type="button" class="btn btn-outline-primary active" data-mode="click">
-                                    クリック選択
+                                    ❶ クリック選択
                                 </button>
                                 <button type="button" class="btn btn-outline-primary" data-mode="arrow">
-                                    方向キー調整
+                                    ❷ 方向キー調整
                                 </button>
                                 <button type="button" class="btn btn-outline-primary" data-mode="dropdown">
-                                    プルダウン選択
+                                    ❸ プルダウン選択
                                 </button>
                                 <button type="button" class="btn btn-outline-primary" data-mode="all">
-                                    一括表示
+                                    ❹ 一括表示
                                 </button>
                             </div>
 
@@ -175,12 +189,14 @@
                                     <div class="col-md-6">
                                         <select class="form-select mb-2" id="joint-selector">
                                             <option value="1">頭部</option>
-                                            <option value="2">肩</option>
-                                            <option value="3">腰</option>
+                                            <option value="2">右肩</option>
+                                            <option value="3">右腰</option>
                                             <option value="4">右膝</option>
                                             <option value="5">左膝</option>
                                             <option value="6">右足首</option>
                                             <option value="7">左足首</option>
+                                            <option value="8">左手首</option>
+                                            <option value="9">右手首</option>
                                         </select>
                                     </div>
                                     <div class="col-md-6">
@@ -205,12 +221,14 @@
                                     <div class="col-md-8">
                                         <select class="form-select" id="dropdown-joint-selector">
                                             <option value="1">頭部</option>
-                                            <option value="2">肩</option>
-                                            <option value="3">腰</option>
+                                            <option value="2">右肩</option>
+                                            <option value="3">右腰</option>
                                             <option value="4">右膝</option>
                                             <option value="5">左膝</option>
                                             <option value="6">右足首</option>
                                             <option value="7">左足首</option>
+                                            <option value="8">左手首</option>
+                                            <option value="9">右手首</option>
                                         </select>
                                     </div>
                                     <div class="col-md-4">
@@ -224,8 +242,12 @@
                         <div class="mt-3">
                             <div class="d-flex justify-content-between">
                                 <div class="btn-group" role="group">
-                                    <button class="btn btn-success" id="analyze-set-btn">セット姿勢分析</button>
-                                    <button class="btn btn-info" id="analyze-start-btn">飛び出し分析</button>
+                                    <button class="btn btn-success" id="analyze-set-btn">
+                                        🏃 セット姿勢分析
+                                    </button>
+                                    <button class="btn btn-info text-white" id="analyze-start-btn">
+                                        🚀 飛び出し分析
+                                    </button>
                                 </div>
                                 <button class="btn btn-outline-secondary" id="download-btn">
                                     <i class="bi bi-download"></i> 画像保存
@@ -240,7 +262,7 @@
                 <!-- 分析結果表示エリア -->
                 <div class="card mb-4">
                     <div class="card-header bg-light">
-                        <h5 class="mb-0">分析結果</h5>
+                        <h5 class="mb-0">📊 分析結果</h5>
                     </div>
                     <div class="card-body">
                         <div class="analysis-container" id="analysis-container" style="display:none;">
@@ -251,7 +273,7 @@
                             <!-- 角度グラフ -->
                             <div class="mb-4">
                                 <h6>角度分析:</h6>
-                                <canvas id="angles-chart"></canvas>
+                                <canvas id="angles-chart" height="200"></canvas>
                             </div>
                             
                             <!-- 詳細な角度情報 -->
@@ -273,6 +295,14 @@
         </div>
     </div>
 
+    <!-- フッター -->
+    <footer class="mt-5">
+        <div class="container">
+            <p>🎯 クラウチングスタンス分析プロ | バージョン: 1.0.0</p>
+            <p>📞 開発者: kotor-1 | ライセンス: MIT | 更新日: 2025年8月5日</p>
+        </div>
+    </footer>
+
     <!-- ヘルプモーダル -->
     <div class="modal fade" id="helpModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -293,16 +323,16 @@
                     
                     <h6>関節点調整モード</h6>
                     <ul>
-                        <li><b>クリック選択</b>: 関節点をクリックして選択し、画像上の任意の場所をクリックして移動</li>
-                        <li><b>方向キー調整</b>: プルダウンで関節点を選び、方向ボタンで細かく移動</li>
-                        <li><b>プルダウン選択</b>: ドロップダウンから関節点を選択して表示・移動</li>
-                        <li><b>一括表示</b>: すべての関節点を同時に表示して調整</li>
+                        <li><b>❶ クリック選択</b>: 関節点をクリックして選択し、画像上の任意の場所をクリックして移動</li>
+                        <li><b>❷ 方向キー調整</b>: プルダウンで関節点を選び、方向ボタンで細かく移動</li>
+                        <li><b>❸ プルダウン選択</b>: ドロップダウンから関節点を選択して表示・移動</li>
+                        <li><b>❹ 一括表示</b>: すべての関節点を同時に表示して調整</li>
                     </ul>
                     
                     <h6>分析モード</h6>
                     <ul>
-                        <li><b>セット姿勢分析</b>: 前足膝角度、後足膝角度、股関節角度を分析</li>
-                        <li><b>飛び出し分析</b>: 下半身角度、上半身角度、くの字角度を分析</li>
+                        <li><b>🏃 セット姿勢分析</b>: 前足膝角度、後足膝角度、股関節角度を分析</li>
+                        <li><b>🚀 飛び出し分析</b>: 下半身角度、上半身角度、くの字角度を分析</li>
                     </ul>
                 </div>
                 <div class="modal-footer">
@@ -369,14 +399,14 @@
             // 関節点の名前マッピング
             const jointNames = {
                 '1': '頭部',
-                '2': '肩',
-                '3': '腰',
+                '2': '右肩',
+                '3': '右腰',
                 '4': '右膝',
                 '5': '左膝',
                 '6': '右足首',
                 '7': '左足首',
-                '8': '右手首',
-                '9': '左手首'
+                '8': '左手首',
+                '9': '右手首'
             };
             
             // ドラッグ&ドロップ処理の設定
@@ -587,11 +617,15 @@
                         };
                         
                         // 角度の計算
-                        const angle = calculateAngle(
-                            [point1.x, point1.y],
-                            [point2.x, point2.y],
-                            [point3.x, point3.y]
-                        );
+                        const a = np_array([point1.x, point1.y]);
+                        const b = np_array([point2.x, point2.y]);
+                        const c = np_array([point3.x, point3.y]);
+                        
+                        const ba = array_subtract(a, b);
+                        const bc = array_subtract(c, b);
+                        
+                        const cosine_angle = dot_product(ba, bc) / (norm(ba) * norm(bc));
+                        const angle = Math.acos(Math.max(-1, Math.min(1, cosine_angle))) * 180 / Math.PI;
                         
                         // 角度表示要素の作成
                         const angleElement = document.createElement('div');
@@ -603,6 +637,23 @@
                         imageContainer.appendChild(angleElement);
                     }
                 });
+            }
+            
+            // NumPyライクの関数を実装
+            function np_array(arr) {
+                return arr;
+            }
+            
+            function array_subtract(a, b) {
+                return [a[0] - b[0], a[1] - b[1]];
+            }
+            
+            function dot_product(a, b) {
+                return a[0] * b[0] + a[1] * b[1];
+            }
+            
+            function norm(a) {
+                return Math.sqrt(a[0] * a[0] + a[1] * a[1]);
             }
             
             // 関節点のドラッグ機能
@@ -707,28 +758,6 @@
             function showError(message) {
                 errorMessage.textContent = message;
                 errorMessage.style.display = 'block';
-            }
-            
-            // 3点間の角度計算
-            function calculateAngle(p1, p2, p3) {
-                const [x1, y1] = p1;
-                const [x2, y2] = p2;
-                const [x3, y3] = p3;
-                
-                // ベクトルの計算
-                const v1 = { x: x1 - x2, y: y1 - y2 };
-                const v2 = { x: x3 - x2, y: y3 - y2 };
-                
-                // ドット積と長さの計算
-                const dot = v1.x * v2.x + v1.y * v2.y;
-                const len1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
-                const len2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
-                
-                // コサインからラジアンへ、そして度に変換
-                const cosine = dot / (len1 * len2);
-                const angle = Math.acos(Math.max(-1, Math.min(1, cosine))) * 180 / Math.PI;
-                
-                return angle;
             }
             
             // 姿勢分析（セット姿勢）
@@ -1045,151 +1074,4 @@
                         ctx.fillText(text.textContent, left, top);
                     });
                     
-                    // 分析結果をcanvasに追加
-                    if (analysisContainer.style.display !== 'none') {
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                        ctx.fillRect(10, 10, 280 * scaleX, 120 * scaleY);
-                        
-                        ctx.font = `bold ${16 * scaleX}px Arial`;
-                        ctx.fillStyle = 'white';
-                        ctx.fillText(`スコア: ${scoreElement.textContent}/100`, 20, 30 * scaleY);
-                        
-                        ctx.font = `${14 * scaleX}px Arial`;
-                        let y = 55 * scaleY;
-                        
-                        anglesContainer.querySelectorAll('div').forEach(angle => {
-                            ctx.fillText(angle.textContent, 20, y);
-                            y += 20 * scaleY;
-                        });
-                    }
-                    
-                    // canvasをダウンロード
-                    const link = document.createElement('a');
-                    link.download = 'crouch-analysis.png';
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
-                };
-                img.src = previewImage.src;
-            });
-            
-            // 共有ボタン
-            shareBtn.addEventListener('click', function() {
-                // 現在の姿勢データをURLエンコード
-                const shareData = {
-                    joints: jointPoints,
-                    analysis: analysisContainer.style.display !== 'none' ? {
-                        score: scoreElement.textContent,
-                        angles: {},
-                        feedback: []
-                    } : null
-                };
                 
-                if (shareData.analysis) {
-                    // 角度データを取得
-                    anglesContainer.querySelectorAll('div').forEach(div => {
-                        const text = div.textContent;
-                        const match = text.match(/(.*?):\s*([\d.]+)/);
-                        if (match) {
-                            shareData.analysis.angles[match[1]] = parseFloat(match[2]);
-                        }
-                    });
-                    
-                    // フィードバックを取得
-                    feedbackContainer.querySelectorAll('.feedback-item').forEach(item => {
-                        shareData.analysis.feedback.push(item.textContent);
-                    });
-                }
-                
-                // データをBase64エンコード
-                const encodedData = btoa(JSON.stringify(shareData));
-                
-                // 共有URL作成
-                const shareUrl = `${window.location.origin}/?data=${encodedData}`;
-                
-                // 共有URLをモーダルに表示
-                shareUrlInput.value = shareUrl;
-                
-                // モーダルを表示
-                const shareModal = new bootstrap.Modal(document.getElementById('shareModal'));
-                shareModal.show();
-            });
-            
-            // 共有URLコピーボタン
-            copyUrlBtn.addEventListener('click', function() {
-                shareUrlInput.select();
-                document.execCommand('copy');
-                
-                document.getElementById('copy-success').style.display = 'block';
-                setTimeout(() => {
-                    document.getElementById('copy-success').style.display = 'none';
-                }, 2000);
-            });
-            
-            // URLから共有データを読み込み
-            function loadSharedData() {
-                const urlParams = new URLSearchParams(window.location.search);
-                const data = urlParams.get('data');
-                
-                if (data) {
-                    try {
-                        const decodedData = JSON.parse(atob(data));
-                        
-                        // 関節点データを読み込み
-                        if (decodedData.joints) {
-                            jointPoints = decodedData.joints;
-                            
-                            // ダミー画像を表示（必要に応じて調整）
-                            previewImage.src = 'data:image/svg+xml;charset=utf-8,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 width%3D%22600%22 height%3D%22400%22 viewBox%3D%220 0 600 400%22%3E%3Crect fill%3D%22%23eee%22 width%3D%22600%22 height%3D%22400%22%2F%3E%3Ctext fill%3D%22%23999%22 font-family%3D%22Arial%2C sans-serif%22 font-size%3D%2220%22 x%3D%22200%22 y%3D%22200%22%3E共有データ表示中%3C%2Ftext%3E%3C%2Fsvg%3E';
-                            previewImage.style.display = 'block';
-                            
-                            // 関節点を描画
-                            renderJointPoints();
-                            
-                            // 分析結果を表示
-                            if (decodedData.analysis) {
-                                displaySharedAnalysis(decodedData.analysis);
-                            }
-                        }
-                    } catch (e) {
-                        console.error('共有データの読み込みに失敗しました:', e);
-                        showError('共有データの読み込みに失敗しました。');
-                    }
-                }
-            }
-            
-            // 共有分析結果の表示
-            function displaySharedAnalysis(analysis) {
-                if (!analysis) return;
-                
-                // スコアを表示
-                scoreElement.textContent = analysis.score;
-                
-                // 角度情報を表示
-                anglesContainer.innerHTML = '';
-                for (const [key, value] of Object.entries(analysis.angles)) {
-                    const angleElement = document.createElement('div');
-                    angleElement.className = 'mb-2';
-                    angleElement.innerHTML = `<strong>${key}:</strong> ${value}°`;
-                    anglesContainer.appendChild(angleElement);
-                }
-                
-                // フィードバックを表示
-                feedbackContainer.innerHTML = '';
-                analysis.feedback.forEach(feedback => {
-                    const feedbackElement = document.createElement('div');
-                    feedbackElement.className = 'feedback-item mb-2';
-                    feedbackElement.textContent = feedback;
-                    feedbackContainer.appendChild(feedbackElement);
-                });
-                
-                // 分析結果を表示
-                analysisContainer.style.display = 'block';
-                noAnalysisMessage.style.display = 'none';
-            }
-            
-            // 共有データがあれば読み込む
-            loadSharedData();
-        });
-    </script>
-</body>
-</html>
