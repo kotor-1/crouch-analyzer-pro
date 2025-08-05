@@ -128,24 +128,6 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        
-        /* 分析モード選択スタイル */
-        .analysis-mode-selector {
-            margin-bottom: 20px;
-        }
-        .mode-option {
-            cursor: pointer;
-            padding: 10px;
-            border-radius: 5px;
-            transition: all 0.2s ease;
-        }
-        .mode-option.active {
-            background-color: #e9f5ff;
-            border-left: 3px solid #0d6efd;
-        }
-        .mode-option:hover:not(.active) {
-            background-color: #f8f9fa;
-        }
     </style>
 </head>
 <body>
@@ -206,30 +188,12 @@
                         分析ツール
                     </div>
                     <div class="card-body">
-                        <!-- 分析モード選択 -->
-                        <div class="analysis-mode-selector mb-4">
-                            <h5 class="mb-3">分析モード選択</h5>
-                            <div class="row">
-                                <div class="col-6">
-                                    <div class="mode-option active" id="mode-set" data-mode="set">
-                                        <h6>セット姿勢</h6>
-                                        <small class="text-muted">スタートの構え姿勢の分析</small>
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="mode-option" id="mode-takeoff" data-mode="takeoff">
-                                        <h6>飛び出し姿勢</h6>
-                                        <small class="text-muted">スタート直後の推進姿勢の分析</small>
-                                    </div>
-                                </div>
-                            </div>
+                        <div class="d-grid gap-2 mb-3">
+                            <button class="btn btn-success" id="analyze-set">セット姿勢分析</button>
+                            <button class="btn btn-info" id="analyze-takeoff">飛び出し分析</button>
                         </div>
                         
-                        <div class="d-grid">
-                            <button class="btn btn-success" id="analyze-button">分析実行</button>
-                        </div>
-                        
-                        <div class="alert alert-warning mt-3" id="analysis-tip">
+                        <div class="alert alert-warning" id="analysis-tip">
                             画像をアップロードし、関節点を調整してから分析を実行してください。
                         </div>
                         
@@ -283,7 +247,8 @@
             const statusMessage = document.getElementById('status-message');
             const detectInfo = document.getElementById('detection-info');
             const detectMethod = document.getElementById('detection-method');
-            const analyzeButton = document.getElementById('analyze-button');
+            const analyzeSetBtn = document.getElementById('analyze-set');
+            const analyzeTakeoffBtn = document.getElementById('analyze-takeoff');
             const resultContainer = document.getElementById('result-container');
             const resultTitle = document.getElementById('result-title');
             const resultContent = document.getElementById('result-content');
@@ -292,24 +257,6 @@
             const aiStatus = document.getElementById('ai-status');
             const analysisEngine = document.getElementById('analysis-engine');
             const dragHelper = document.getElementById('drag-helper');
-            const modeSet = document.getElementById('mode-set');
-            const modeTakeoff = document.getElementById('mode-takeoff');
-            
-            // 分析モード
-            let currentMode = 'set'; // デフォルトはセット姿勢
-            
-            // モード選択
-            modeSet.addEventListener('click', function() {
-                modeSet.classList.add('active');
-                modeTakeoff.classList.remove('active');
-                currentMode = 'set';
-            });
-            
-            modeTakeoff.addEventListener('click', function() {
-                modeTakeoff.classList.add('active');
-                modeSet.classList.remove('active');
-                currentMode = 'takeoff';
-            });
             
             // システム情報を取得
             fetch('/api/health')
@@ -594,14 +541,24 @@
                 });
             });
             
-            // 分析ボタン
-            analyzeButton.addEventListener('click', function() {
+            // セット姿勢分析ボタン
+            analyzeSetBtn.addEventListener('click', function() {
                 if (Object.keys(keypoints).length === 0) {
                     showStatus('先に画像をアップロードしてください', 'warning');
                     return;
                 }
                 
-                analyzePosture(currentMode);
+                analyzePosture('set');
+            });
+            
+            // 飛び出し分析ボタン
+            analyzeTakeoffBtn.addEventListener('click', function() {
+                if (Object.keys(keypoints).length === 0) {
+                    showStatus('先に画像をアップロードしてください', 'warning');
+                    return;
+                }
+                
+                analyzePosture('takeoff');
             });
             
             // 姿勢分析を実行
