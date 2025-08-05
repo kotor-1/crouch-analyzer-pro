@@ -76,7 +76,7 @@ def calculate_angle(point1, point2, point3):
         vector2 = [point3[0] - point2[0], point3[1] - point2[1]]
         
         # 内積を計算
-        if DEPENDENCIES_AVAILABLE and 'np' in globals():
+        if DEPENDENCIES_AVAILABLE and np is not None:
             # numpy利用可能な場合
             vector1 = np.array(vector1)
             vector2 = np.array(vector2)
@@ -176,12 +176,29 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    # デバッグ出力を追加
+    print("=== アップロードリクエスト受信 ===")
+    print(f"リクエストファイル: {list(request.files.keys())}")
+    print(f"アップロードフォルダ: {app.config['UPLOAD_FOLDER']}")
+    
+    # アップロードフォルダの再確認
+    try:
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        print(f"アップロードフォルダ作成/確認完了: {app.config['UPLOAD_FOLDER']}")
+    except Exception as e:
+        print(f"フォルダ作成エラー: {str(e)}")
+        return jsonify({'error': f'アップロードフォルダの作成に失敗しました: {str(e)}'}), 500
+    
     if 'file' not in request.files:
+        print("'file'フィールドが見つかりません")
         return jsonify({'error': 'ファイルが選択されていません'}), 400
     
     file = request.files['file']
     if file.filename == '':
+        print("ファイル名が空です")
         return jsonify({'error': 'ファイルが選択されていません'}), 400
+    
+    print(f"ファイル名: {file.filename}, タイプ: {file.content_type}")
     
     if file and allowed_file(file.filename):
         try:
@@ -191,11 +208,19 @@ def upload_file():
                 filename = 'uploaded_image.jpg'
             
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            print(f"保存先パス: {filepath}")
             file.save(filepath)
+            print(f"ファイル保存完了: {filename}")
+            
+            # ファイルの存在確認
+            if not os.path.exists(filepath):
+                print(f"エラー: 保存したファイルが見つかりません: {filepath}")
+                return jsonify({'error': 'ファイルの保存に失敗しました'}), 500
             
             # 画像の情報を取得
             with Image.open(filepath) as img:
                 width, height = img.size
+                print(f"画像サイズ: {width}x{height}")
             
             keypoints_data = {}
             ai_detection_used = False
@@ -203,6 +228,7 @@ def upload_file():
             if MEDIAPIPE_AVAILABLE and cv2 is not None:
                 # MediaPipeで姿勢推定
                 try:
+                    print("MediaPipeで姿勢推定を開始...")
                     image = cv2.imread(filepath)
                     if image is not None:
                         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -217,13 +243,15 @@ def upload_file():
                                     y = int(landmark.y * height)
                                     keypoints_data[frontend_name] = {'x': x, 'y': y}
                             ai_detection_used = True
-                            print("✅ AI pose detection successful")
+                            print(f"✅ AI姿勢検出成功: {len(keypoints_data)}個の関節点を検出")
+                        else:
+                            print("⚠️ MediaPipeがランドマークを検出できませんでした")
                 except Exception as e:
-                    print(f"⚠️ AI pose detection failed: {e}")
+                    print(f"⚠️ AI姿勢検出失敗: {e}")
             
             # MediaPipeが利用できない場合またはランドマークが検出されない場合のデフォルト
             if not keypoints_data:
-                print("🔧 Using default joint positions - manual adjustment available")
+                print("🔧 デフォルト関節点位置を使用します")
                 # デフォルトの関節点位置を画像サイズに合わせてスケール
                 scale_x = width / 400  # 基準サイズ400px
                 scale_y = height / 500  # 基準サイズ500px
@@ -234,7 +262,7 @@ def upload_file():
                         'y': int(default_pos['y'] * scale_y)
                     }
             
-            return jsonify({
+            result = {
                 'success': True,
                 'filename': filename,
                 'keypoints': keypoints_data,
@@ -244,11 +272,16 @@ def upload_file():
                 'ai_detection_used': ai_detection_used,
                 'detection_method': 'AI pose detection' if ai_detection_used else 'Default positions (manual adjustment recommended)',
                 'dependencies_available': DEPENDENCIES_AVAILABLE
-            })
+            }
+            
+            print(f"アップロード処理完了: {result['image_url']}")
+            return jsonify(result)
             
         except Exception as e:
+            print(f"⚠️ 画像処理中にエラー: {str(e)}")
             return jsonify({'error': f'画像処理中にエラーが発生しました: {str(e)}'}), 500
     
+    print(f"⚠️ 無効なファイル形式: {file.filename}")
     return jsonify({'error': '無効なファイル形式です。JPG, PNG, WEBP形式をサポートしています。'}), 400
 
 @app.route('/analyze', methods=['POST'])
@@ -317,6 +350,11 @@ def test_endpoint():
             'mediapipe_available': MEDIAPIPE_AVAILABLE
         }), 500
 
+@app.route('/test_upload')
+def test_upload_page():
+    """シンプルなアップロードテスト用ページ"""
+    return render_template('test_upload.html')
+
 @app.route('/api/health')
 def health_check():
     """ヘルスチェック用エンドポイント"""
@@ -342,4 +380,5 @@ def health_check():
 if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() in ('true', '1', 't')
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)
