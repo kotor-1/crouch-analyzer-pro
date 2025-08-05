@@ -136,7 +136,7 @@ function handleFileUpload(file) {
             createJointButtons();
             updateModeDisplay();
             document.getElementById('analyzeBtn').disabled = false;
-            showSuccess('✅ AI姿勢推定が完了しました！');
+            showSuccess('✅ 画像アップロード完了！手動調整で正確分析できます');
         } else {
             showError('❌ ' + data.error);
         }

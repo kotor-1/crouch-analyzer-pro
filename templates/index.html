@@ -12,8 +12,14 @@
     <div class="container-fluid">
         <div class="row">
             <div class="col-12">
-                <h1 class="text-center my-4">🏃 クラウチングスタート姿勢分析プロ</h1>
-                <p class="text-center text-muted">🎯 チーム共有対応・本格分析ツール</p>
+                <h1 class="text-center my-4">🏃 クラウチングスタート姿勢分析プロ <span class="badge bg-info">超軽量版</span></h1>
+                <p class="text-center text-muted">🎯 手動関節点設定・確実動作版</p>
+                {% if manual_only %}
+                <div class="alert alert-info text-center">
+                    <strong>🚀 超軽量デプロイ版</strong><br>
+                    手動関節点設定で正確な姿勢分析が可能です
+                </div>
+                {% endif %}
             </div>
         </div>
         
@@ -22,12 +28,12 @@
             <div class="col-lg-8">
                 <div class="card">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5>📷 画像アップロード＆関節点調整</h5>
+                        <h5>📷 画像アップロード＆手動関節点調整</h5>
                         <div>
                             <select class="form-select" id="adjustmentMode" style="width: 200px;">
                                 <option value="click">❶ クリック選択</option>
                                 <option value="direction">❷ 方向キー調整</option>
-                                <option value="dropdown">❃ プルダウン選択</option>
+                                <option value="dropdown">❸ プルダウン選択</option>
                                 <option value="batch">❹ 一括表示</option>
                             </select>
                         </div>
@@ -39,6 +45,12 @@
                                 <i class="bi bi-cloud-upload" style="font-size: 3rem; color: #667eea;"></i>
                                 <p class="mt-2">📁 ファイルをドラッグ&ドロップ または クリックして選択</p>
                                 <p class="text-muted small">JPG, PNG, WEBP 対応 (最大16MB)</p>
+                                <div class="alert alert-success mt-2 mb-0 small">
+                                    <strong>✨ 超軽量版特徴:</strong><br>
+                                    • 瞬間アップロード<br>
+                                    • 手動調整で正確分析<br>
+                                    • 確実動作保証
+                                </div>
                             </div>
                             <input type="file" class="form-control d-none" id="imageUpload" accept="image/*">
                         </div>
