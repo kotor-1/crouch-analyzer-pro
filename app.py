@@ -1,6 +1,4 @@
 from flask import Flask, render_template, request, jsonify, send_from_directory
-import cv2
-import mediapipe as mp
 import numpy as np
 import math
 from PIL import Image
@@ -16,23 +14,49 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 # アップロードフォルダが存在しない場合は作成
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# MediaPipe姿勢推定の初期化
-mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
-pose = mp_pose.Pose(static_image_mode=True, min_detection_confidence=0.5)
+# MediaPipe will be imported conditionally if available
+try:
+    import cv2
+    import mediapipe as mp
+    # MediaPipe姿勢推定の初期化
+    mp_pose = mp.solutions.pose
+    mp_drawing = mp.solutions.drawing_utils
+    pose = mp_pose.Pose(static_image_mode=True, min_detection_confidence=0.5)
+    MEDIAPIPE_AVAILABLE = True
+except ImportError:
+    MEDIAPIPE_AVAILABLE = False
+    cv2 = None
+    mp = None
+    pose = None
 
-# 関節点の名前とインデックスのマッピング
-POSE_LANDMARKS = {
-    0: "鼻", 1: "左目（内側）", 2: "左目", 3: "左目（外側）", 4: "右目（内側）", 5: "右目", 6: "右目（外側）",
-    7: "左耳", 8: "右耳", 9: "口（左）", 10: "口（右）",
-    11: "左肩", 12: "右肩", 13: "左肘", 14: "右肘", 15: "左手首", 16: "右手首",
-    17: "左小指", 18: "右小指", 19: "左人差し指", 20: "右人差し指", 21: "左親指", 22: "右親指",
-    23: "左腰", 24: "右腰", 25: "左膝", 26: "右膝", 27: "左足首", 28: "右足首",
-    29: "左かかと", 30: "右かかと", 31: "左つま先", 32: "右つま先"
+# MediaPipe landmark indices to frontend joint mapping
+MEDIAPIPE_TO_FRONTEND = {
+    11: 'LShoulder',  # 左肩
+    12: 'RShoulder',  # 右肩
+    23: 'LHip',       # 左腰
+    24: 'RHip',       # 右腰
+    25: 'LKnee',      # 左膝
+    26: 'RKnee',      # 右膝
+    27: 'LAnkle',     # 左足首
+    28: 'RAnkle',     # 右足首
+    0: 'C7'           # 鼻（第7頸椎の代用）
+}
+
+# Default joint positions for when MediaPipe is not available
+DEFAULT_JOINTS = {
+    'LShoulder': {'x': 150, 'y': 100},
+    'RShoulder': {'x': 250, 'y': 100},
+    'LHip': {'x': 170, 'y': 200},
+    'RHip': {'x': 230, 'y': 200},
+    'LKnee': {'x': 180, 'y': 300},
+    'RKnee': {'x': 220, 'y': 300},
+    'LAnkle': {'x': 190, 'y': 400},
+    'RAnkle': {'x': 210, 'y': 400},
+    'C7': {'x': 200, 'y': 50}
 }
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif'}
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 def calculate_angle(point1, point2, point3):
     """3点から角度を計算する関数"""
@@ -65,75 +89,68 @@ def calculate_angle(point1, point2, point3):
     except:
         return 0
 
-def analyze_crouch_start(landmarks, analysis_type="set"):
-    """クラウチングスタートの分析を行う"""
+def analyze_crouch_angles(keypoints, analysis_type="set"):
+    """クラウチングスタートの角度分析を行う"""
     analysis_result = {}
     
-    if analysis_type == "set":
-        # セット姿勢の分析
-        # 前足の膝角度（左膝を前足と仮定）
-        if all(idx in landmarks for idx in [23, 25, 27]):  # 左腰、左膝、左足首
-            front_knee_angle = calculate_angle(landmarks[23], landmarks[25], landmarks[27])
-            analysis_result['前足の膝角度'] = {
-                'value': front_knee_angle,
-                'ideal_min': 80,
-                'ideal_max': 100,
-                'status': 'good' if 80 <= front_knee_angle <= 100 else 'needs_adjustment'
-            }
-        
-        # 後足の膝角度（右膝を後足と仮定）
-        if all(idx in landmarks for idx in [24, 26, 28]):  # 右腰、右膝、右足首
-            back_knee_angle = calculate_angle(landmarks[24], landmarks[26], landmarks[28])
-            analysis_result['後足の膝角度'] = {
-                'value': back_knee_angle,
-                'ideal_min': 120,
-                'ideal_max': 135,
-                'status': 'good' if 120 <= back_knee_angle <= 135 else 'needs_adjustment'
-            }
-        
-        # 前足股関節角度
-        if all(idx in landmarks for idx in [11, 23, 25]):  # 左肩、左腰、左膝
-            front_hip_angle = calculate_angle(landmarks[11], landmarks[23], landmarks[25])
-            analysis_result['前足股関節角度'] = {
-                'value': front_hip_angle,
-                'ideal_min': 40,
-                'ideal_max': 60,
-                'status': 'good' if 40 <= front_hip_angle <= 60 else 'needs_adjustment'
-            }
+    try:
+        if analysis_type == "set":
+            # セット姿勢の分析
+            # 前足の膝角度（左膝を前足と仮定）
+            if all(joint in keypoints for joint in ['LHip', 'LKnee', 'LAnkle']):
+                hip = keypoints['LHip']
+                knee = keypoints['LKnee']
+                ankle = keypoints['LAnkle']
+                front_angle = calculate_angle([hip['x'], hip['y']], [knee['x'], knee['y']], [ankle['x'], ankle['y']])
+                analysis_result['front_angle'] = front_angle
             
-    elif analysis_type == "start":
-        # 飛び出し分析
-        # 下半身角度（腰-膝-足首）
-        if all(idx in landmarks for idx in [23, 25, 27]):
-            lower_body_angle = calculate_angle(landmarks[23], landmarks[25], landmarks[27])
-            analysis_result['下半身角度'] = {
-                'value': lower_body_angle,
-                'ideal_min': 30,
-                'ideal_max': 60,
-                'status': 'good' if 30 <= lower_body_angle <= 60 else 'needs_adjustment'
-            }
+            # 後足の膝角度（右膝を後足と仮定）
+            if all(joint in keypoints for joint in ['RHip', 'RKnee', 'RAnkle']):
+                hip = keypoints['RHip']
+                knee = keypoints['RKnee']
+                ankle = keypoints['RAnkle']
+                rear_angle = calculate_angle([hip['x'], hip['y']], [knee['x'], knee['y']], [ankle['x'], ankle['y']])
+                analysis_result['rear_angle'] = rear_angle
+            
+            # 前足股関節角度
+            if all(joint in keypoints for joint in ['LShoulder', 'LHip', 'LKnee']):
+                shoulder = keypoints['LShoulder']
+                hip = keypoints['LHip']
+                knee = keypoints['LKnee']
+                front_hip_angle = calculate_angle([shoulder['x'], shoulder['y']], [hip['x'], hip['y']], [knee['x'], knee['y']])
+                analysis_result['front_hip_angle'] = front_hip_angle
+                
+        elif analysis_type == "takeoff":
+            # 飛び出し分析
+            # 下半身角度（腰-膝-足首）
+            if all(joint in keypoints for joint in ['LHip', 'LKnee', 'LAnkle']):
+                hip = keypoints['LHip']
+                knee = keypoints['LKnee']
+                ankle = keypoints['LAnkle']
+                lower_angle = calculate_angle([hip['x'], hip['y']], [knee['x'], knee['y']], [ankle['x'], ankle['y']])
+                analysis_result['lower_angle'] = lower_angle
+            
+            # 上半身角度（肩-腰-膝）
+            if all(joint in keypoints for joint in ['LShoulder', 'LHip', 'LKnee']):
+                shoulder = keypoints['LShoulder']
+                hip = keypoints['LHip']
+                knee = keypoints['LKnee']
+                upper_angle = calculate_angle([shoulder['x'], shoulder['y']], [hip['x'], hip['y']], [knee['x'], knee['y']])
+                analysis_result['upper_angle'] = upper_angle
+            
+            # くの字角度（肩-腰-足首）
+            if all(joint in keypoints for joint in ['LShoulder', 'LHip', 'LAnkle']):
+                shoulder = keypoints['LShoulder']
+                hip = keypoints['LHip']
+                ankle = keypoints['LAnkle']
+                kunoji_angle = calculate_angle([shoulder['x'], shoulder['y']], [hip['x'], hip['y']], [ankle['x'], ankle['y']])
+                analysis_result['kunoji_angle'] = kunoji_angle
         
-        # 上半身角度（肩-腰-膝）
-        if all(idx in landmarks for idx in [11, 23, 25]):
-            upper_body_angle = calculate_angle(landmarks[11], landmarks[23], landmarks[25])
-            analysis_result['上半身角度'] = {
-                'value': upper_body_angle,
-                'ideal_min': 25,
-                'ideal_max': 55,
-                'status': 'good' if 25 <= upper_body_angle <= 55 else 'needs_adjustment'
-            }
+        analysis_result['analysis_type'] = analysis_type
+        return analysis_result
         
-        # くの字角度（肩-腰-足首）
-        if all(idx in landmarks for idx in [11, 23, 27]):
-            kuno_angle = calculate_angle(landmarks[11], landmarks[23], landmarks[27])
-            analysis_result['くの字角度'] = {
-                'value': kuno_angle,
-                'ideal_min': 150,
-                'ideal_max': 180,
-                'status': 'good' if 150 <= kuno_angle <= 180 else 'needs_adjustment'
-            }
-    
-    return analysis_result
+    except Exception as e:
+        return {'error': f'角度計算エラー: {str(e)}', 'analysis_type': analysis_type}
 
 @app.route('/')
 def index():
@@ -158,48 +175,65 @@ def upload_file():
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
             
-            # MediaPipeで姿勢推定
-            image = cv2.imread(filepath)
-            if image is None:
-                return jsonify({'error': '画像の読み込みに失敗しました'}), 400
-                
-            image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            results = pose.process(image_rgb)
+            # 画像の情報を取得
+            with Image.open(filepath) as img:
+                width, height = img.size
             
-            landmarks_data = {}
-            if results.pose_landmarks:
-                height, width = image.shape[:2]
-                for idx, landmark in enumerate(results.pose_landmarks.landmark):
-                    x = int(landmark.x * width)
-                    y = int(landmark.y * height)
-                    landmarks_data[idx] = [x, y]
+            keypoints_data = {}
+            
+            if MEDIAPIPE_AVAILABLE:
+                # MediaPipeで姿勢推定
+                image = cv2.imread(filepath)
+                if image is None:
+                    return jsonify({'error': '画像の読み込みに失敗しました'}), 400
+                    
+                image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                results = pose.process(image_rgb)
+                
+                if results.pose_landmarks:
+                    # MediaPipeの関節点をフロントエンド形式に変換
+                    for mp_idx, frontend_name in MEDIAPIPE_TO_FRONTEND.items():
+                        if mp_idx < len(results.pose_landmarks.landmark):
+                            landmark = results.pose_landmarks.landmark[mp_idx]
+                            x = int(landmark.x * width)
+                            y = int(landmark.y * height)
+                            keypoints_data[frontend_name] = {'x': x, 'y': y}
+            
+            # MediaPipeが利用できない場合またはランドマークが検出されない場合のデフォルト
+            if not keypoints_data:
+                # デフォルトの関節点位置を画像サイズに合わせてスケール
+                scale_x = width / 400  # 基準サイズ400px
+                scale_y = height / 500  # 基準サイズ500px
+                
+                for joint_name, default_pos in DEFAULT_JOINTS.items():
+                    keypoints_data[joint_name] = {
+                        'x': int(default_pos['x'] * scale_x),
+                        'y': int(default_pos['y'] * scale_y)
+                    }
             
             return jsonify({
                 'success': True,
                 'filename': filename,
-                'landmarks': landmarks_data,
-                'image_size': {'width': image.shape[1], 'height': image.shape[0]}
+                'keypoints': keypoints_data,
+                'image_url': f'/static/uploads/{filename}',
+                'image_width': width,
+                'image_height': height
             })
             
         except Exception as e:
             return jsonify({'error': f'画像処理中にエラーが発生しました: {str(e)}'}), 500
     
-    return jsonify({'error': '無効なファイル形式です'}), 400
+    return jsonify({'error': '無効なファイル形式です。JPG, PNG, WEBP形式をサポートしています。'}), 400
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
     try:
         data = request.get_json()
-        landmarks = data.get('landmarks', {})
-        analysis_type = data.get('analysis_type', 'set')
+        keypoints = data.get('keypoints', {})
+        analysis_mode = data.get('analysis_mode', 'set')
         
-        # 文字列キーを整数に変換
-        landmarks_int = {}
-        for key, value in landmarks.items():
-            landmarks_int[int(key)] = value
-        
-        result = analyze_crouch_start(landmarks_int, analysis_type)
-        return jsonify({'success': True, 'analysis': result})
+        result = analyze_crouch_angles(keypoints, analysis_mode)
+        return jsonify({'success': True, **result})
         
     except Exception as e:
         return jsonify({'error': f'分析中にエラーが発生しました: {str(e)}'}), 500
@@ -207,6 +241,22 @@ def analyze():
 @app.route('/static/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+@app.route('/share/<analysis_id>')
+def share_analysis(analysis_id):
+    """チーム共有用のURL"""
+    # 実際の実装では分析結果をデータベースに保存し、analysis_idで取得
+    # ここではデモ用に基本ページを返す
+    return render_template('index.html', shared_analysis_id=analysis_id)
+
+@app.route('/api/health')
+def health_check():
+    """ヘルスチェック用エンドポイント"""
+    return jsonify({
+        'status': 'healthy',
+        'mediapipe_available': MEDIAPIPE_AVAILABLE,
+        'version': '1.0.0'
+    })
 
 if __name__ == '__main__':
     import os

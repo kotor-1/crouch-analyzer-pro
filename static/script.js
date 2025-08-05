@@ -6,6 +6,7 @@ let canvas = null;
 let ctx = null;
 let img = null;
 let adjustmentMode = 'click';
+let angleChart = null;
 
 // 関節点の日本語名マッピング（正しい順序で定義）
 const jointNames = {
@@ -33,9 +34,11 @@ function initializeApp() {
     ctx = canvas.getContext('2d');
     
     // イベントリスナーの設定
+    setupDropArea();
     document.getElementById('imageUpload').addEventListener('change', handleImageUpload);
     document.getElementById('adjustmentMode').addEventListener('change', handleModeChange);
     document.getElementById('analyzeBtn').addEventListener('click', analyzePosture);
+    document.getElementById('downloadBtn').addEventListener('click', downloadResults);
     
     // キャンバスクリックイベント
     canvas.addEventListener('click', handleCanvasClick);
@@ -53,9 +56,65 @@ function initializeApp() {
     console.log('アプリケーションが初期化されました');
 }
 
+function setupDropArea() {
+    const dropArea = document.getElementById('dropArea');
+    const fileInput = document.getElementById('imageUpload');
+    
+    // ドロップエリアクリックでファイル選択
+    dropArea.addEventListener('click', () => {
+        fileInput.click();
+    });
+    
+    // ドラッグ&ドロップイベント
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+        document.body.addEventListener(eventName, preventDefaults, false);
+    });
+    
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, highlight, false);
+    });
+    
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, unhighlight, false);
+    });
+    
+    dropArea.addEventListener('drop', handleDrop, false);
+}
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+function highlight(e) {
+    document.getElementById('dropArea').classList.add('dragover');
+}
+
+function unhighlight(e) {
+    document.getElementById('dropArea').classList.remove('dragover');
+}
+
+function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    
+    if (files.length > 0) {
+        handleFileUpload(files[0]);
+    }
+}
+
 function handleImageUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
+    handleFileUpload(file);
+}
+
+function handleFileUpload(file) {
+    if (!file.type.startsWith('image/')) {
+        showError('❌ 画像ファイルを選択してください');
+        return;
+    }
     
     const formData = new FormData();
     formData.append('file', file);
@@ -450,6 +509,8 @@ function analyzePosture() {
     .then(response => response.json())
     .then(data => {
         displayAnalysisResults(data);
+        createAngleChart(data);
+        document.getElementById('downloadBtn').style.display = 'block';
     })
     .catch(error => {
         showError('❌ 分析エラー: ' + error.message);
@@ -467,16 +528,145 @@ function displayAnalysisResults(data) {
     let html = '<h6>📊 分析結果</h6>';
     
     if (data.analysis_type === 'set') {
-        html += createMetricCard('前足の膝角度', data.front_angle, '°', 80, 100);
-        html += createMetricCard('後足の膝角度', data.rear_angle, '°', 120, 135);
-        html += createMetricCard('前足股関節角度', data.front_hip_angle, '°', 40, 60);
+        if (data.front_angle !== undefined) {
+            html += createMetricCard('前足の膝角度', data.front_angle, '°', 80, 100);
+        }
+        if (data.rear_angle !== undefined) {
+            html += createMetricCard('後足の膝角度', data.rear_angle, '°', 120, 135);
+        }
+        if (data.front_hip_angle !== undefined) {
+            html += createMetricCard('前足股関節角度', data.front_hip_angle, '°', 40, 60);
+        }
     } else if (data.analysis_type === 'takeoff') {
-        html += createMetricCard('下半身角度', data.lower_angle, '°', 30, 60);
-        html += createMetricCard('上半身角度', data.upper_angle, '°', 25, 55);
-        html += createMetricCard('くの字角度', data.kunoji_angle, '°', 150, 180);
+        if (data.lower_angle !== undefined) {
+            html += createMetricCard('下半身角度', data.lower_angle, '°', 30, 60);
+        }
+        if (data.upper_angle !== undefined) {
+            html += createMetricCard('上半身角度', data.upper_angle, '°', 25, 55);
+        }
+        if (data.kunoji_angle !== undefined) {
+            html += createMetricCard('くの字角度', data.kunoji_angle, '°', 150, 180);
+        }
     }
     
     container.innerHTML = html;
+}
+
+function createAngleChart(data) {
+    const ctx = document.getElementById('angleChart').getContext('2d');
+    
+    // 既存のチャートを破棄
+    if (angleChart) {
+        angleChart.destroy();
+    }
+    
+    const labels = [];
+    const angles = [];
+    const idealMin = [];
+    const idealMax = [];
+    
+    if (data.analysis_type === 'set') {
+        if (data.front_angle !== undefined) {
+            labels.push('前足膝');
+            angles.push(data.front_angle);
+            idealMin.push(80);
+            idealMax.push(100);
+        }
+        if (data.rear_angle !== undefined) {
+            labels.push('後足膝');
+            angles.push(data.rear_angle);
+            idealMin.push(120);
+            idealMax.push(135);
+        }
+        if (data.front_hip_angle !== undefined) {
+            labels.push('前足股関節');
+            angles.push(data.front_hip_angle);
+            idealMin.push(40);
+            idealMax.push(60);
+        }
+    } else if (data.analysis_type === 'takeoff') {
+        if (data.lower_angle !== undefined) {
+            labels.push('下半身');
+            angles.push(data.lower_angle);
+            idealMin.push(30);
+            idealMax.push(60);
+        }
+        if (data.upper_angle !== undefined) {
+            labels.push('上半身');
+            angles.push(data.upper_angle);
+            idealMin.push(25);
+            idealMax.push(55);
+        }
+        if (data.kunoji_angle !== undefined) {
+            labels.push('くの字');
+            angles.push(data.kunoji_angle);
+            idealMin.push(150);
+            idealMax.push(180);
+        }
+    }
+    
+    angleChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '測定値',
+                    data: angles,
+                    backgroundColor: 'rgba(102, 126, 234, 0.6)',
+                    borderColor: 'rgba(102, 126, 234, 1)',
+                    borderWidth: 2
+                },
+                {
+                    label: '理想範囲(最小)',
+                    data: idealMin,
+                    backgroundColor: 'rgba(40, 167, 69, 0.3)',
+                    borderColor: 'rgba(40, 167, 69, 1)',
+                    borderWidth: 1,
+                    type: 'line'
+                },
+                {
+                    label: '理想範囲(最大)',
+                    data: idealMax,
+                    backgroundColor: 'rgba(40, 167, 69, 0.3)',
+                    borderColor: 'rgba(40, 167, 69, 1)',
+                    borderWidth: 1,
+                    type: 'line'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: '角度 (度)'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: '角度分析グラフ'
+                }
+            }
+        }
+    });
+    
+    document.getElementById('chartCard').style.display = 'block';
+}
+
+function downloadResults() {
+    // 結果画像を生成してダウンロード
+    const canvas = document.getElementById('imageCanvas');
+    const link = document.createElement('a');
+    link.download = 'crouch_analysis_result.png';
+    link.href = canvas.toDataURL();
+    link.click();
+    
+    showSuccess('✅ 結果画像をダウンロードしました');
 }
 
 function createMetricCard(label, value, unit, minGood, maxGood) {
