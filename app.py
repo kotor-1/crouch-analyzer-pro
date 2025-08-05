@@ -1,12 +1,14 @@
 from flask import Flask, request, render_template, jsonify, redirect, url_for, flash
 import os
-import cv2
-import numpy as np
 import uuid
 from datetime import datetime
 import mediapipe as mp
-import math
+import cv2
+import numpy as np
+from PIL import Image
+import io
 import json
+import math
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'development-key')
@@ -15,10 +17,6 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB制限
 
 # アップロードフォルダが存在しない場合は作成
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# MediaPipe Poseモデルの初期化
-mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
 
 # 許可されるファイル拡張子
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
@@ -66,51 +64,53 @@ def detect_joints():
         return jsonify({'error': 'No image provided'}), 400
     
     file = request.files['image']
+    img_bytes = file.read()
     
-    # 画像をOpenCVで読み込む
-    file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
-    img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    # PILでの画像読み込み
+    image = Image.open(io.BytesIO(img_bytes))
+    image_np = np.array(image)
     
-    # MediaPipe Poseで関節検出
-    with mp_pose.Pose(
-        static_image_mode=True,
-        model_complexity=1,
-        min_detection_confidence=0.5) as pose:
-        
-        # BGR画像をRGBに変換
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = pose.process(img_rgb)
-        
-        if not results.pose_landmarks:
-            return jsonify({'error': 'No pose detected'}), 400
-        
-        # 検出された関節点を正規化された座標で取得
-        height, width, _ = img.shape
-        landmarks = results.pose_landmarks.landmark
-        
-        # 必要な関節点をマッピング
-        joint_points = {
-            '1': {'x': landmarks[mp_pose.PoseLandmark.NOSE.value].x, 
-                  'y': landmarks[mp_pose.PoseLandmark.NOSE.value].y},
-            '2': {'x': landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].x, 
-                  'y': landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value].y},
-            '3': {'x': landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].x, 
-                  'y': landmarks[mp_pose.PoseLandmark.LEFT_HIP.value].y},
-            '4': {'x': landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, 
-                  'y': landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y},
-            '5': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, 
-                  'y': landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y},
-            '6': {'x': landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, 
-                  'y': landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y},
-            '7': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, 
-                  'y': landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y},
-            '8': {'x': landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x, 
-                  'y': landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y},
-            '9': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x, 
-                  'y': landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y},
-        }
-        
-        return jsonify({'success': True, 'joints': joint_points})
+    # MediaPipe Pose検出の設定
+    mp_pose = mp.solutions.pose
+    pose = mp_pose.Pose(static_image_mode=True, 
+                        model_complexity=2,
+                        min_detection_confidence=0.5)
+    
+    # RGB形式に変換（MediaPipeの要件）
+    # 注意: cv2はBGRで扱うが、PILからのnumpyアレイはRGBのため変換不要
+    
+    # ポーズ検出
+    results = pose.process(image_np)
+    
+    if not results.pose_landmarks:
+        return jsonify({'error': 'No pose detected'}), 400
+    
+    # 関節点の取得
+    landmarks = results.pose_landmarks.landmark
+    
+    # クラウチングスタート姿勢に必要な関節点を抽出
+    joint_points = {
+        '1': {'x': landmarks[mp_pose.PoseLandmark.NOSE.value].x, 
+              'y': landmarks[mp_pose.PoseLandmark.NOSE.value].y},
+        '2': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].x, 
+              'y': landmarks[mp_pose.PoseLandmark.RIGHT_SHOULDER.value].y},
+        '3': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].x, 
+              'y': landmarks[mp_pose.PoseLandmark.RIGHT_HIP.value].y},
+        '4': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].x, 
+              'y': landmarks[mp_pose.PoseLandmark.RIGHT_KNEE.value].y},
+        '5': {'x': landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].x, 
+              'y': landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value].y},
+        '6': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].x, 
+              'y': landmarks[mp_pose.PoseLandmark.RIGHT_ANKLE.value].y},
+        '7': {'x': landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].x, 
+              'y': landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value].y},
+        '8': {'x': landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].x, 
+              'y': landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value].y},
+        '9': {'x': landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].x, 
+              'y': landmarks[mp_pose.PoseLandmark.RIGHT_WRIST.value].y}
+    }
+    
+    return jsonify({'success': True, 'joints': joint_points})
 
 @app.route('/analyze', methods=['POST'])
 def analyze_posture():
@@ -120,7 +120,7 @@ def analyze_posture():
     if not joints:
         return jsonify({'error': '関節データがありません'}), 400
     
-    # 姿勢分析のロジック
+    # 以下は姿勢分析のロジック例
     analysis_result = {
         'score': calculate_score(joints),
         'feedback': generate_feedback(joints),
@@ -133,7 +133,8 @@ def analyze_posture():
     })
 
 def calculate_score(joints):
-    # スコア計算のロジック
+    # スコア計算のロジック（実際のアプリケーションに合わせて実装）
+    # 例：理想的な角度との差分を計算
     try:
         angles = calculate_angles(joints)
         
@@ -196,28 +197,17 @@ def calculate_angles(joints):
 
 def calculate_angle(p1, p2, p3):
     # 3点間の角度を計算
-    a = (p1[0], p1[1])
-    b = (p2[0], p2[1])
-    c = (p3[0], p3[1])
+    a = np.array([p1[0], p1[1]])
+    b = np.array([p2[0], p2[1]])
+    c = np.array([p3[0], p3[1]])
     
-    ba = (a[0] - b[0], a[1] - b[1])
-    bc = (c[0] - b[0], c[1] - b[1])
+    ba = a - b
+    bc = c - b
     
-    # ドット積
-    dot_product = ba[0] * bc[0] + ba[1] * bc[1]
+    cosine_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc))
+    angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
     
-    # ベクトルの長さ
-    len_ba = math.sqrt(ba[0]**2 + ba[1]**2)
-    len_bc = math.sqrt(bc[0]**2 + bc[1]**2)
-    
-    # コサイン
-    cosine = dot_product / (len_ba * len_bc)
-    cosine = max(-1.0, min(1.0, cosine))  # -1.0から1.0の範囲に制限
-    
-    # 角度（ラジアン）を度に変換
-    angle = math.acos(cosine) * 180 / math.pi
-    
-    return angle
+    return np.degrees(angle)
 
 def generate_feedback(joints):
     # フィードバック生成のロジック
@@ -259,4 +249,6 @@ def health_check():
     return jsonify({"status": "ok"}), 200
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=False, host='0.0.0.0', port=port)
