@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>画像アップロードテスト</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 40px;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <h1>画像アップロードテスト</h1>
+    <form id="test-form" enctype="multipart/form-data">
+        <input type="file" name="file" accept="image/*">
+        <button type="submit">アップロード</button>
+    </form>
+
+    <div class="result" id="result">
+        結果がここに表示されます
+    </div>
+
+    <script>
+        document.getElementById('test-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const resultDiv = document.getElementById('result');
+            
+            resultDiv.textContent = 'アップロード中...';
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <p>✅ アップロード成功</p>
+                        <p>ファイル名: ${data.filename}</p>
+                        <p>画像サイズ: ${data.image_width} x ${data.image_height}</p>
+                        <img src="${data.image_url}" style="max-width: 300px">
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<p>❌ エラー: ${data.error}</p>`;
+                }
+            })
+            .catch(error => {
+                resultDiv.textContent = `⚠️ 通信エラー: ${error.message}`;
+            });
+        });
+    </script>
+</body>
+</html>
